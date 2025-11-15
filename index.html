@@ -1,0 +1,56 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Solar System Simulation</title>
+  <style>
+   * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #000;
+      overflow: hidden;
+    }
+    .controls {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 15px;
+      border-radius: 8px;
+      color: white;
+      font-family: Arial, sans-serif;
+      width: 250px;
+    }
+    .control-group {
+      margin-bottom: 5px;
+    }
+    label {
+      display: block;
+      margin-bottom: 1px;
+      font-size: 9px;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .value {
+      font-size: 9px;
+      color: #aaa;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <div class="control-group">
+      <label>Скорость симуляции (x реального времени)</label>
+      <input type="range" id="speed-slider" min="1" max="1000000" step="100">
+      <div class="value" id="speed-value">0</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

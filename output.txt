@@ -1,0 +1,738 @@
+
+--- Файл: src\adapters\browser-adapter.ts ---
+import { PlatformAdapter } from "../types/platform-adapter";
+
+export class BrowserAdapter implements PlatformAdapter {
+  private resizeObserver: ResizeObserver | null = null;
+  private resizeCallbacks: Set<() => void> = new Set();
+
+  createCanvas(): HTMLCanvasElement {
+    return document.createElement("canvas");
+  }
+
+  getWidth(): number {
+    return Math.max(window.innerWidth, 400); // мин. ширина 400px
+  }
+
+  getHeight(): number {
+    return Math.max(window.innerHeight, 300); // мин. высота 300px
+  }
+
+  onResize(callback: () => void): void {
+    this.resizeCallbacks.add(callback);
+    window.addEventListener("resize", callback);
+  }
+
+  offResize(callback: () => void): void {
+    this.resizeCallbacks.delete(callback);
+    window.removeEventListener("resize", callback);
+  }
+
+  appendToDom(element: HTMLElement): void {
+    document.body.appendChild(element);
+  }
+
+  requestAnimationFrame(callback: FrameRequestCallback): void {
+    window.requestAnimationFrame(callback);
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\config\config-api.ts ---
+import { Vector3D } from "../physics/vector";
+import { PLANET_DATA, PlanetConfig } from "./planet-data";
+import { SIMULATION_CONFIG } from "./simulation-config";
+
+export interface SimulationConfig {
+  SIMULATION_DT: number;
+  DEFAULT_DT: number;
+  MAX_DT: number;
+  AU_IN_PX: number;
+  PLANET_RADIUS_SCALE: number;
+}
+
+export class ConfigAPI {
+  private static planetData: PlanetConfig[] = [...PLANET_DATA]; // изначальные данные
+
+  static setSimulationSpeed(factor: number): void {
+    if (factor <= 0) {
+      throw new Error("Simulation speed factor must be positive");
+    }
+    SIMULATION_CONFIG.SIMULATION_DT = factor;
+  }
+
+  static getSimulationSpeed(): number {
+    return SIMULATION_CONFIG.SIMULATION_DT;
+  }
+
+  static setScale(auInPx: number): void {
+    if (auInPx <= 0) {
+      throw new Error("AU in pixels must be positive");
+    }
+    SIMULATION_CONFIG.AU_IN_PX = auInPx;
+    SIMULATION_CONFIG._scaleDistCached = 0;
+  }
+
+  static getScale(): number {
+    return SIMULATION_CONFIG.AU_IN_PX;
+  }
+
+  static setPlanetScale(scale: number): void {
+    if (scale <= 0) {
+      throw new Error("Planet radius scale must be positive");
+    }
+    SIMULATION_CONFIG.PLANET_RADIUS_SCALE = scale;
+  }
+
+  static getPlanetScale(): number {
+    return SIMULATION_CONFIG.PLANET_RADIUS_SCALE;
+  }
+
+  static addPlanet(config: PlanetConfig): void {
+    const existing = ConfigAPI.getPlanet(config.name);
+    if (existing) {
+      throw new Error(`Planet with name "${config.name}" already exists`);
+    }
+    ConfigAPI.planetData.push(config);
+  }
+
+  static removePlanet(name: string): boolean {
+    const index = ConfigAPI.findPlanetIndex(name);
+    if (index === -1) {
+      return false;
+    }
+    ConfigAPI.planetData.splice(index, 1);
+    return true;
+  }
+
+  static updatePlanet(name: string, updates: Partial<PlanetConfig>): boolean {
+    const planet = ConfigAPI.getPlanet(name);
+    if (!planet) {
+      return false;
+    }
+
+    Object.assign(planet, updates);
+    return true;
+  }
+
+  static getPlanet(name: string): PlanetConfig | undefined {
+    return ConfigAPI.planetData.find((p) => p.name === name);
+  }
+
+  static getAllPlanets(): PlanetConfig[] {
+    return [...ConfigAPI.planetData]; // возвращаем копию
+  }
+
+  private static findPlanetIndex(name: string): number {
+    return ConfigAPI.planetData.findIndex((p) => p.name === name);
+  }
+
+  static resetSimulationConfig(): void {
+    SIMULATION_CONFIG.SIMULATION_DT = 1;
+    SIMULATION_CONFIG.DEFAULT_DT = 86400;
+    SIMULATION_CONFIG.MAX_DT = 864000;
+    SIMULATION_CONFIG.AU_IN_PX = 100;
+    SIMULATION_CONFIG.PLANET_RADIUS_SCALE = 1;
+    SIMULATION_CONFIG._scaleDistCached = 0;
+  }
+
+  static resetPlanetData(): void {
+    ConfigAPI.planetData = [
+      {
+        name: "Sun",
+        mass: 1.989e30,
+        pos: new Vector3D(0, 0, 0),
+        vel: new Vector3D(0, 0, 0),
+        color: "yellow",
+        radius: 696340000,
+      },
+      // ... остальные планеты как в исходном PLANET_DATA
+    ];
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\config\planet-data.ts ---
+import { Vector3D } from "../physics/vector";
+
+export interface PlanetConfig {
+  name: string;
+  mass: number;
+  pos: Vector3D;
+  vel: Vector3D;
+  color: string;
+  radius: number; // в метрах
+}
+
+export const PLANET_DATA: PlanetConfig[] = [
+  {
+    name: "Sun",
+    mass: 1.989e30,
+    pos: new Vector3D(0, 0, 0),
+    vel: new Vector3D(0, 0, 0),
+    color: "yellow",
+    radius: 696340000,
+  },
+  {
+    name: "Mercury",
+    mass: 3.3011e23,
+    pos: new Vector3D(5.791e10, 0, 0),
+    vel: new Vector3D(0, 47362, 0),
+    color: "gray",
+    radius: 2439700,
+  },
+  {
+    name: "Venus",
+    mass: 4.8675e24,
+    pos: new Vector3D(1.082e11, 0, 0),
+    vel: new Vector3D(0, 35020, 0),
+    color: "orange",
+    radius: 6051800,
+  },
+  {
+    name: "Earth",
+    mass: 5.972e24,
+    pos: new Vector3D(1.496e11, 0, 0),
+    vel: new Vector3D(0, 29783, 0),
+    color: "blue",
+    radius: 6371000,
+  },
+  {
+    name: "Mars",
+    mass: 6.4171e23,
+    pos: new Vector3D(2.279e11, 0, 0),
+    vel: new Vector3D(0, 24077, 0),
+    color: "red",
+    radius: 3389500,
+  },
+  {
+    name: "Jupiter",
+    mass: 1.8982e27,
+    pos: new Vector3D(7.785e11, 0, 0),
+    vel: new Vector3D(0, 13070, 0),
+    color: "brown",
+    radius: 69911000,
+  },
+  {
+    name: "Saturn",
+    mass: 5.6834e26,
+    pos: new Vector3D(1.434e12, 0, 0),
+    vel: new Vector3D(0, 9690, 0),
+    color: "gold",
+    radius: 58232000,
+  },
+  {
+    name: "Uranus",
+    mass: 8.681e25,
+    pos: new Vector3D(2.871e12, 0, 0),
+    vel: new Vector3D(0, 6810, 0),
+    color: "lightblue",
+    radius: 25362000,
+  },
+  {
+    name: "Neptune",
+    mass: 1.0241e26,
+    pos: new Vector3D(4.495e12, 0, 0),
+    vel: new Vector3D(0, 5430, 0),
+    color: "darkblue",
+    radius: 24622000,
+  },
+];
+
+--------------------------------------------------
+
+--- Файл: src\config\simulation-config.ts ---
+export const SIMULATION_CONFIG = {
+  SIMULATION_DT: 1, // шаг симуляции (x реального времени)
+  DEFAULT_DT: 86400,
+  MAX_DT: 864000, // макс. шаг симуляции (защита от фризов)
+
+  // Сколько пикселей соответствует 1 а.е. (настраивается пользователем)
+  AU_IN_PX: 500,
+
+  _scaleDistCached: 0,
+
+  // Масштаб для расстояний: 1 м = ? px
+  get SCALE_DIST() {
+    if (!this._scaleDistCached) {
+      this._scaleDistCached = this.AU_IN_PX / 1.496e11; // 1 а.е. = 1.496e11 м
+    }
+
+    return this._scaleDistCached;
+  },
+
+  // Коэффициент для увеличения радиусов планет (по умолчанию = 1 — строго пропорционально)
+  PLANET_RADIUS_SCALE: 1,
+};
+
+--------------------------------------------------
+
+--- Файл: src\entities\celestial-body.ts ---
+import { Vector3D } from "../physics/vector";
+import { Planet } from "./planet.interface";
+
+export abstract class CelestialBody implements Planet {
+  constructor(
+    public name: string,
+    public mass: number,
+    public pos: Vector3D,
+    public vel: Vector3D,
+    public color: string,
+    public radius: number
+  ) {}
+
+  abstract update(dt: number, others: Planet[]): void;
+}
+
+--------------------------------------------------
+
+--- Файл: src\entities\planet.interface.ts ---
+import { Vector3D } from "../physics/vector";
+
+export interface Planet {
+  name: string;
+  mass: number;
+  pos: Vector3D;
+  vel: Vector3D;
+  color: string;
+  radius: number; // в метрах
+}
+
+--------------------------------------------------
+
+--- Файл: src\entities\planet.ts ---
+import { CelestialBody } from "./celestial-body";
+import { GravityCalculator } from "../physics/gravity";
+
+export class Planet extends CelestialBody {
+  update(dt: number, others: Planet[]) {
+    // Метод (Эйлер)
+    // const acc = GravityCalculator.calculateAcceleration(this, others);
+    // this.vel = this.vel.add(acc.multiply(dt));
+    // this.pos = this.pos.add(this.vel.multiply(dt));
+
+    // Метод (Верле)
+    // Шаг 1: Сохраняем текущую позицию
+    const posOld = this.pos;
+
+    // Шаг 2: Обновляем позицию по формуле Верле
+    const acc = GravityCalculator.calculateAcceleration(this, others);
+
+    this.pos = posOld
+      .add(this.vel.multiply(dt))
+      .add(acc.multiply(0.5 * dt * dt));
+
+    // Шаг 3: Вычисляем новое ускорение (на обновлённой позиции)
+    const accNew = GravityCalculator.calculateAcceleration(this, others);
+
+    // Шаг 4: Обновляем скорость
+    this.vel = this.vel.add(acc.add(accNew).multiply(0.5 * dt));
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\main.ts ---
+import { PlatformAdapter } from "./types/platform-adapter";
+import { ThreeRenderer } from "./rendering/three-renderer";
+import { SolarSystem } from "./simulation/solar-system";
+import { SIMULATION_CONFIG } from "./config/simulation-config";
+import { BrowserAdapter } from "./adapters/browser-adapter";
+import { ConfigAPI } from "./config/config-api";
+
+export function runSimulation(platformAdapter: PlatformAdapter) {
+  const canvas = platformAdapter.createCanvas();
+  const renderer = new ThreeRenderer(canvas);
+  platformAdapter.appendToDom(canvas);
+
+  // Элемент для отображения FPS (создайте в HTML)
+  const fpsElement = document.createElement("div");
+  fpsElement.style.position = "absolute";
+  fpsElement.style.top = "10px";
+  fpsElement.style.left = "10px";
+  fpsElement.style.color = "white";
+  document.body.appendChild(fpsElement);
+  renderer.setFpsElement(fpsElement);
+
+  const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
+  renderer.initPlanets(system.getPlanets());
+
+  let lastTimestamp = 0;
+
+  function animate(currentTimestamp: number) {
+    const deltaTime = currentTimestamp - lastTimestamp;
+    lastTimestamp = currentTimestamp;
+
+    // Ограничиваем максимальный шаг симуляции
+    const simulationTimeStep = Math.min(
+      (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
+      SIMULATION_CONFIG.MAX_DT
+    );
+
+    system.step(simulationTimeStep);
+    renderer.updatePlanets(system.getPlanets());
+    renderer.render(deltaTime); // передаём deltaTime для расчёта FPS
+
+    platformAdapter.requestAnimationFrame(animate);
+  }
+
+  platformAdapter.requestAnimationFrame(animate);
+
+  // Обработчик resize
+  platformAdapter.onResize(() => {
+    renderer.resize(window.innerWidth, window.innerHeight);
+  });
+}
+
+function initControls() {
+  const speedSlider = document.getElementById(
+    "speed-slider"
+  ) as HTMLInputElement;
+  const scaleSlider = document.getElementById(
+    "scale-slider"
+  ) as HTMLInputElement;
+  const planetScaleSlider = document.getElementById(
+    "planet-scale-slider"
+  ) as HTMLInputElement;
+
+  const speedValue = document.getElementById("speed-value");
+  const scaleValue = document.getElementById("scale-value");
+  const planetScaleValue = document.getElementById("planet-scale-value");
+
+  speedSlider.value = SIMULATION_CONFIG.SIMULATION_DT.toString();
+  scaleSlider.value = SIMULATION_CONFIG.AU_IN_PX.toString();
+  planetScaleSlider.value = SIMULATION_CONFIG.PLANET_RADIUS_SCALE.toString();
+
+  if (speedValue) {
+    speedValue.textContent = SIMULATION_CONFIG.SIMULATION_DT.toString();
+
+    speedSlider.addEventListener("input", () => {
+      const value = parseInt(speedSlider.value, 10);
+      ConfigAPI.setSimulationSpeed(value);
+      speedValue.textContent = value.toString();
+    });
+  }
+
+  if (scaleValue) {
+    scaleValue.textContent = SIMULATION_CONFIG.AU_IN_PX.toString();
+
+    scaleSlider.addEventListener("input", () => {
+      const value = parseInt(scaleSlider.value, 10);
+      ConfigAPI.setScale(value);
+      scaleValue.textContent = value.toString();
+    });
+  }
+
+  if (planetScaleValue) {
+    planetScaleValue.textContent =
+      SIMULATION_CONFIG.PLANET_RADIUS_SCALE.toFixed(1);
+
+    planetScaleSlider.addEventListener("input", () => {
+      const value = parseFloat(planetScaleSlider.value);
+      ConfigAPI.setPlanetScale(value);
+      planetScaleValue.textContent = value.toFixed(1);
+    });
+  }
+}
+
+const platformAdapter = new BrowserAdapter();
+
+runSimulation(platformAdapter);
+initControls();
+
+--------------------------------------------------
+
+--- Файл: src\physics\gravity.ts ---
+import { Planet } from "../entities/planet";
+import { Vector3D } from "./vector";
+
+export class GravityCalculator {
+  static readonly G = 6.6743e-11; // м³·кг⁻¹·с⁻²
+
+  static calculateAcceleration(planet: Planet, others: Planet[]): Vector3D {
+    let acc = new Vector3D();
+
+    for (const other of others) {
+      if (other === planet) continue;
+
+      const dx = other.pos.x - planet.pos.x;
+      const dy = other.pos.y - planet.pos.y;
+      const dz = other.pos.z - planet.pos.z;
+      const distSq = dx * dx + dy * dy + dz * dz;
+
+      if (distSq < 1e-20) continue;
+
+      const dist = Math.sqrt(distSq);
+      const minDist = planet.radius + other.radius;
+
+      if (dist < minDist) {
+        console.warn(`Столкновение: ${planet.name} и ${other.name}`);
+        continue;
+      }
+
+      const forceFactor = (this.G * other.mass) / (dist * distSq);
+
+      acc = acc.add(
+        new Vector3D(forceFactor * dx, forceFactor * dy, forceFactor * dz)
+      );
+    }
+
+    return acc;
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\physics\vector.ts ---
+export interface Vector {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export class Vector3D implements Vector {
+  constructor(
+    public x: number = 0,
+    public y: number = 0,
+    public z: number = 0
+  ) {}
+
+  add(v: Vector3D): Vector3D {
+    return new Vector3D(this.x + v.x, this.y + v.y, this.z + v.z);
+  }
+
+  multiply(scalar: number): Vector3D {
+    return new Vector3D(this.x * scalar, this.y * scalar, this.z * scalar);
+  }
+
+  magnitude(): number {
+    return Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\three-renderer.ts ---
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { Planet } from "../entities/planet";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
+
+export class ThreeRenderer {
+  private scene: THREE.Scene;
+  private camera: THREE.PerspectiveCamera;
+  private renderer: THREE.WebGLRenderer;
+  private controls: OrbitControls;
+  private planetMeshes: Map<string, THREE.Mesh> = new Map();
+  private fpsElement: HTMLElement | null = null;
+
+  constructor(canvas: HTMLCanvasElement) {
+    // Инициализация сцены
+    this.scene = new THREE.Scene();
+    this.setupLighting();
+    this.scene.background = new THREE.Color(0x000011);
+
+    // Камера
+    this.camera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      10000
+    );
+
+    this.camera.position.set(0, 0, 1000);
+
+    // Рендерер
+    this.renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: true,
+    });
+
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Управление камерой
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.05;
+    this.controls.screenSpacePanning = false;
+    this.controls.minDistance = 50;
+    this.controls.maxDistance = 2000;
+  }
+
+  updatePlanets(planets: Planet[]): void {
+    planets.forEach((planet) => {
+      const mesh = this.planetMeshes.get(planet.name);
+
+      if (!mesh) return;
+
+      const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
+
+      mesh.position.set(
+        planet.pos.x * scaleDist,
+        planet.pos.y * scaleDist,
+        planet.pos.z * scaleDist
+      );
+    });
+  }
+
+  setFpsElement(element: HTMLElement) {
+    this.fpsElement = element;
+  }
+
+  render(deltaTimeMs: number): void {
+    if (this.fpsElement) {
+      const fps = 1000 / deltaTimeMs;
+      this.fpsElement.textContent = `FPS: ${fps.toFixed(1)}`;
+    }
+
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  initPlanets(planets: Planet[]): void {
+    planets.forEach((planet) => {
+      const mesh = this.createPlanetMesh(planet);
+      this.scene.add(mesh);
+    });
+  }
+
+  resize(width: number, height: number) {
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height);
+  }
+
+  private setupLighting() {
+    // Окружающее освещение (рассеянное)
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    this.scene.add(ambientLight);
+
+    // Направленный свет (имитация Солнца)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    directionalLight.position.set(500, 500, 500);
+    this.scene.add(directionalLight);
+
+    // Дополнительный точечный свет (для объёма)
+    const pointLight = new THREE.PointLight(0xffffcc, 0.8);
+    pointLight.position.set(-300, -300, -300);
+    this.scene.add(pointLight);
+  }
+
+  private createPlanetMesh(planet: Planet): THREE.Mesh {
+    const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
+
+    // Минимальный визуальный радиус (чтобы планеты были видны даже при малом масштабе)
+    const minVisualRadius = 0;
+
+    // Базовый радиус в пикселях
+    const baseRadius = planet.radius * scaleDist;
+
+    // Применяем пользовательский масштаб и ограничиваем минимум
+    const visualRadius = Math.max(
+      baseRadius * SIMULATION_CONFIG.PLANET_RADIUS_SCALE,
+      minVisualRadius
+    );
+
+    const geometry = new THREE.SphereGeometry(visualRadius, 32, 32);
+
+    const material = new THREE.MeshPhongMaterial({
+      // лучше, чем BasicMaterial
+      color: new THREE.Color(planet.color),
+      shininess: 50,
+      specular: 0x333333,
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = planet.name;
+
+    this.planetMeshes.set(planet.name, mesh);
+
+    return mesh;
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\simulation\solar-system.ts ---
+import { Planet } from "../entities/planet";
+import { PLANET_DATA } from "../config/planet-data";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
+
+export class SolarSystem {
+  private planets: Planet[] = [];
+  private dt: number;
+
+  constructor(dt: number = SIMULATION_CONFIG.DEFAULT_DT) {
+    this.dt = dt;
+    this.initPlanets();
+  }
+
+  private initPlanets() {
+    for (const config of PLANET_DATA) {
+      this.planets.push(
+        new Planet(
+          config.name,
+          config.mass,
+          config.pos,
+          config.vel,
+          config.color,
+          config.radius
+        )
+      );
+    }
+  }
+
+  getPlanets() {
+    return this.planets;
+  }
+
+  step(dt: number = this.dt) {
+    const planetsCopy = [...this.planets];
+
+    for (const planet of this.planets) {
+      planet.update(dt, planetsCopy);
+    }
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\types\platform-adapter.ts ---
+export interface PlatformAdapter {
+  createCanvas(): HTMLCanvasElement;
+  getWidth(): number;
+  getHeight(): number;
+  onResize(callback: () => void): void;
+  offResize(callback: () => void): void;
+  appendToDom(element: HTMLElement): void;
+  requestAnimationFrame(callback: FrameRequestCallback): void;
+}
+
+--------------------------------------------------
+
+============================================================
+CNHERNEHF ДИРЕКТОРИИ:
+============================================================
+adapters/
+  browser-adapter.ts
+config/
+  config-api.ts
+  planet-data.ts
+  simulation-config.ts
+entities/
+  celestial-body.ts
+  planet.interface.ts
+  planet.ts
+main.ts
+physics/
+  gravity.ts
+  vector.ts
+rendering/
+  three-renderer.ts
+simulation/
+  solar-system.ts
+types/
+  platform-adapter.ts
