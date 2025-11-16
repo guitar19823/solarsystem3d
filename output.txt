@@ -1,14 +1,18 @@
 
 --- Файл: src\adapters\browser-adapter.ts ---
-import { PlatformAdapter } from "../types/platform-adapter";
+import { PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
   private resizeObserver: ResizeObserver | null = null;
   private resizeCallbacks: Set<() => void> = new Set();
   private canvas: HTMLCanvasElement | undefined;
 
-  createCanvas(): HTMLCanvasElement {
-    this.canvas = document.createElement("canvas");
+  getCanvas(): HTMLCanvasElement {
+    if (!this.canvas) {
+      this.canvas = document.createElement("canvas");
+
+      document.body.appendChild(this.canvas);
+    }
 
     return this.canvas;
   }
@@ -48,6 +52,21 @@ export class BrowserAdapter implements PlatformAdapter {
   requestAnimationFrame(callback: FrameRequestCallback): void {
     window.requestAnimationFrame(callback);
   }
+}
+
+--------------------------------------------------
+
+--- Файл: src\adapters\platform-adapter.ts ---
+export interface PlatformAdapter {
+  getCanvas(): HTMLCanvasElement;
+  getWidth(): number;
+  getHeight(): number;
+  getPixelRatio(): number;
+  onResize(callback: () => void): void;
+  offResize(callback: () => void): void;
+  appendToDom(element: HTMLElement): void;
+  appendCanvasToDom(): void;
+  requestAnimationFrame(callback: FrameRequestCallback): void;
 }
 
 --------------------------------------------------
@@ -347,18 +366,39 @@ export class SpaceObject extends CelestialBody {
 --------------------------------------------------
 
 --- Файл: src\main.ts ---
-import { PlatformAdapter } from "./types/platform-adapter";
-import { ThreeRenderer } from "./rendering/three-renderer";
+import * as THREE from "three";
+import { PlatformAdapter } from "./adapters/platform-adapter";
+import { BrowserAdapter } from "./adapters/browser-adapter";
 import { SolarSystem } from "./simulation/solar-system";
 import { SIMULATION_CONFIG } from "./config/simulation-config";
-import { BrowserAdapter } from "./adapters/browser-adapter";
 import { ConfigAPI } from "./config/config-api";
 
-export function runSimulation(platformAdapter: PlatformAdapter) {
-  const renderer = new ThreeRenderer(platformAdapter);
-  platformAdapter.appendCanvasToDom();
+// Новые импорты после рефакторинга
+import { SceneManager } from "./rendering/scene-manager";
+import { CameraController } from "./rendering/camera-controller";
+import { TextureManager } from "./rendering/texture-manager";
+import { ObjectFactory } from "./rendering/object-factory";
+import { RendererCore } from "./rendering/renderer-core";
 
-  // Элемент для отображения FPS (создайте в HTML)
+export function runSimulation(platformAdapter: PlatformAdapter) {
+  // 1. Создаём зависимости
+  const sceneManager = new SceneManager();
+  const textureManager = new TextureManager();
+  const objectFactory = new ObjectFactory(textureManager);
+  const cameraController = new CameraController(platformAdapter);
+
+  // 2. Создаём основной рендерер
+  const renderer = new RendererCore(
+    platformAdapter,
+    sceneManager,
+    cameraController,
+    objectFactory
+  );
+
+  // 3. Инициализируем рендерер (создаёт canvas, настраивает resize)
+  renderer.initialize();
+
+  // 4. Добавляем FPS-элемент
   const fpsElement = document.createElement("div");
   fpsElement.style.position = "absolute";
   fpsElement.style.top = "10px";
@@ -367,7 +407,10 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
   document.body.appendChild(fpsElement);
   renderer.setFpsElement(fpsElement);
 
+  // 5. Создаём симуляцию
   const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
+
+  // 6. Инициализируем объекты в рендерере
   renderer.initSpaceObjects(system.getSpaceObjects());
 
   let lastTimestamp = 0;
@@ -376,7 +419,6 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
     const deltaTime = currentTimestamp - lastTimestamp;
     lastTimestamp = currentTimestamp;
 
-    // Ограничиваем максимальный шаг симуляции
     const simulationTimeStep = Math.min(
       (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
       SIMULATION_CONFIG.MAX_DT
@@ -384,16 +426,16 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
 
     system.step(simulationTimeStep);
     renderer.updateSpaceObjects(system.getSpaceObjects());
-    renderer.render(deltaTime); // передаём deltaTime для расчёта FPS
+    renderer.render(deltaTime);
 
     platformAdapter.requestAnimationFrame(animate);
   }
 
   platformAdapter.requestAnimationFrame(animate);
 
-  // Обработчик resize
   platformAdapter.onResize(() => {
-    renderer.resize(window.innerWidth, window.innerHeight);
+    renderer.initialize(); // Переинициализация при resize
+    cameraController.lookAt(new THREE.Vector3(0, 0, 0));
   });
 }
 
@@ -401,14 +443,12 @@ function initControls() {
   const speedSlider = document.getElementById(
     "speed-slider"
   ) as HTMLInputElement;
-
   const speedValue = document.getElementById("speed-value");
 
   speedSlider.value = SIMULATION_CONFIG.SIMULATION_DT.toString();
 
   if (speedValue) {
     speedValue.textContent = SIMULATION_CONFIG.SIMULATION_DT.toString();
-
     speedSlider.addEventListener("input", () => {
       const value = parseInt(speedSlider.value, 10);
       ConfigAPI.setSimulationSpeed(value);
@@ -418,7 +458,6 @@ function initControls() {
 }
 
 const platformAdapter = new BrowserAdapter();
-
 runSimulation(platformAdapter);
 initControls();
 
@@ -497,31 +536,35 @@ export class Vector3D implements Vector {
 
 --------------------------------------------------
 
---- Файл: src\rendering\three-renderer.ts ---
+--- Файл: src\rendering\camera-controller.ts ---
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { SpaceObject } from "../entities/space-object";
-import { SIMULATION_CONFIG } from "../config/simulation-config";
-import { PlatformAdapter } from "../types/platform-adapter";
+import { ICameraController } from "./interfaces";
+import { PlatformAdapter } from "../adapters/platform-adapter";
 
-export class ThreeRenderer {
-  private platformAdapter: PlatformAdapter;
-  private scene: THREE.Scene;
+export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
-  private renderer: THREE.WebGLRenderer;
-  private controls: OrbitControls;
-  private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
-  private fpsElement: HTMLElement | null = null;
-  private textureCache: Map<string, THREE.Texture> = new Map();
-  private textureLoader: THREE.TextureLoader;
+
+  // Углы поворота камеры (yaw/pitch)
+  private yaw: number = 0; // горизонтальный поворот
+  private pitch: number = 0; // вертикальный поворот
+
+  // Точка обзора (совпадает с позицией камеры)
+  private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+
+  // Плавность и инерция
+  private damping: number = 0.25; // коэффициент демпфирования (0–1)
+  private velocity: THREE.Vector2 = new THREE.Vector2(0, 0); // скорость вращения
+
+  // Клавиши
+  private keys: { [key: string]: boolean } = {};
+  private moveSpeed: number = 500; // скорость перемещения
+
+  // Мышь
+  private isMouseDown: boolean = false;
+  private mousePrev: THREE.Vector2 = new THREE.Vector2();
+  private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
   constructor(platformAdapter: PlatformAdapter) {
-    this.platformAdapter = platformAdapter;
-    this.scene = new THREE.Scene();
-    this.textureLoader = new THREE.TextureLoader();
-    this.setupLighting();
-    this.scene.background = new THREE.Color(0x000000);
-
     this.camera = new THREE.PerspectiveCamera(
       65,
       platformAdapter.getWidth() / platformAdapter.getHeight(),
@@ -529,13 +572,463 @@ export class ThreeRenderer {
       50000000000
     );
 
-    this.camera.position.set(0, 0, 1000);
+    this.setupEvents(platformAdapter);
+    this.updateCamera();
+  }
 
-    const spaceGeometry = new THREE.SphereGeometry(500000, 30, 30);
-    const spaceTexture = this.textureLoader.load(
-      `/src/textures/spacemedium.jpg`
+  private setupEvents(platformAdapter: PlatformAdapter): void {
+    const canvas = platformAdapter.getCanvas();
+
+    // Мышь: нажатие
+    canvas.addEventListener("mousedown", (e) => {
+      this.isMouseDown = true;
+      this.mousePrev.set(e.clientX, e.clientY);
+    });
+
+    // Мышь: движение
+    canvas.addEventListener("mousemove", (e) => {
+      if (this.isMouseDown) {
+        this.mouseCurr.set(e.clientX, e.clientY);
+        this.handleMouseRotate();
+        this.mousePrev.copy(this.mouseCurr);
+      }
+    });
+
+    // Мышь: отжатие
+    canvas.addEventListener("mouseup", () => {
+      this.isMouseDown = false;
+    });
+
+    // Мышь: выход за пределы
+    canvas.addEventListener("mouseleave", () => {
+      this.isMouseDown = false;
+    });
+
+    // Колёсико (зум)
+    canvas.addEventListener("wheel", (e) => {
+      const zoomSpeed = 10;
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(this.camera.quaternion);
+      this.target.addScaledVector(direction, e.deltaY * 0.01 * zoomSpeed);
+      this.updateCamera();
+    });
+
+    // Клавиатура
+    window.addEventListener("keydown", (e) => {
+      this.keys[e.code] = true;
+    });
+
+    window.addEventListener("keyup", (e) => {
+      this.keys[e.code] = false;
+    });
+  }
+
+  update(): void {
+    this.applyDamping();
+    this.updateCameraPosition();
+    this.updateCamera();
+  }
+
+  // Демпфирование скорости вращения
+  private applyDamping(): void {
+    this.velocity.multiplyScalar(1 - this.damping);
+  }
+
+  // Обработка вращения мышью
+  private handleMouseRotate(): void {
+    const delta = new THREE.Vector2()
+      .subVectors(this.mouseCurr, this.mousePrev)
+      .multiplyScalar(0.002); // чувствительность мыши
+
+    this.velocity.set(-delta.x, delta.y);
+  }
+
+  // Перемещение по клавишам (относительно системы координат камеры)
+  private updateCameraPosition(): void {
+    if (!Object.values(this.keys).some((v) => v)) return;
+
+    const move = new THREE.Vector3();
+
+    // Направление взгляда камеры
+    const cameraDirection = new THREE.Vector3(0, 0, -1);
+    cameraDirection.applyQuaternion(this.camera.quaternion);
+
+    // Вектор «вправо» от камеры
+    const right = new THREE.Vector3(1, 0, 0);
+    right.applyQuaternion(this.camera.quaternion);
+
+    // Вертикальный вектор (мировая ось Y)
+    const up = new THREE.Vector3(0, 1, 0);
+
+    let dx = 0,
+      dy = 0,
+      dz = 0;
+
+    if (this.keys["KeyW"]) dz += 1; // вперёд
+    if (this.keys["KeyS"]) dz -= 1; // назад
+    if (this.keys["KeyA"]) dx -= 1; // влево
+    if (this.keys["KeyD"]) dx += 1; // вправо
+    if (this.keys["KeyQ"]) dy += 1; // вверх
+    if (this.keys["KeyE"]) dy -= 1; // вниз
+
+    if (dx !== 0 || dy !== 0 || dz !== 0) {
+      move
+        .addScaledVector(right, dx)
+        .addScaledVector(up, dy)
+        .addScaledVector(cameraDirection, dz);
+
+      move.multiplyScalar(this.moveSpeed * 0.0001);
+
+      // Перемещаем и камеру, и точку обзора
+      this.camera.position.add(move);
+      this.target.add(move);
+    }
+  }
+
+  // Обновление позиции и ориентации камеры
+  private updateCamera(): void {
+    // Применяем демпфированную скорость к углам
+    this.yaw += this.velocity.x;
+    this.pitch += this.velocity.y;
+
+    // Ограничиваем вертикальный угол (чтобы не переворачиваться)
+    this.pitch = Math.max(
+      -Math.PI / 2 + 0.01,
+      Math.min(Math.PI / 2 - 0.01, this.pitch)
     );
 
+    // Обнуляем velocity после применения
+    this.velocity.set(0, 0);
+
+    // Создаём матрицу поворота
+    const rotationMatrix = new THREE.Matrix4();
+    rotationMatrix.makeRotationY(this.yaw);
+
+    const pitchMatrix = new THREE.Matrix4();
+    pitchMatrix.makeRotationX(this.pitch);
+    rotationMatrix.multiply(pitchMatrix);
+
+    // Применяем поворот к камере через кватернион (предпочтительный способ)
+    this.camera.quaternion.setFromRotationMatrix(rotationMatrix);
+
+    // Камера смотрит в направлении поворота
+    this.camera.position.copy(this.target);
+    this.camera.lookAt(
+      this.target
+        .clone()
+        .add(new THREE.Vector3(0, 0, -1).applyMatrix4(rotationMatrix))
+    );
+  }
+
+  resize(width: number, height: number): void {
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+  }
+
+  getCamera(): THREE.PerspectiveCamera {
+    return this.camera;
+  }
+
+  lookAt(target: THREE.Vector3): void {
+    this.target.copy(target);
+    this.updateCamera();
+  }
+
+  setPosition(position: THREE.Vector3): void {
+    this.camera.position.copy(position);
+    this.target.copy(position);
+    this.updateCamera();
+  }
+
+  reset(): void {
+    this.yaw = 0;
+    this.pitch = 0;
+    this.target.set(0, 0, 0);
+    this.velocity.set(0, 0);
+    this.updateCamera();
+  }
+
+  setEnabled(enabled: boolean): void {
+    // Можно добавить логику включения/отключения управления
+  }
+
+  getPosition(): THREE.Vector3 {
+    return this.camera.position;
+  }
+
+  getDirection(): THREE.Vector3 {
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+    return direction;
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\interfaces.ts ---
+import * as THREE from "three";
+import { SpaceObject } from "../entities/space-object";
+
+export interface ITextureManager {
+  loadTexture(path: string): THREE.Texture;
+}
+
+export interface IObjectFactory {
+  createSpaceObject(spaceObject: SpaceObject): THREE.Mesh;
+}
+
+export interface ISceneManager {
+  getScene(): THREE.Scene;
+  setupLighting(): void;
+}
+
+export interface ICameraController {
+  /**
+   * Обновляет состояние камеры (например, применяет damping, обрабатывает ввод).
+   */
+  update(): void;
+
+  /**
+   * Изменяет размеры viewport (при ресайзе окна).
+   * @param width Новая ширина в пикселях.
+   * @param height Новая высота в пикселях.
+   */
+  resize(width: number, height: number): void;
+
+  /**
+   * Возвращает текущую камеру Three.js.
+   */
+  getCamera(): THREE.PerspectiveCamera;
+
+  /**
+   * Устанавливает точку, на которую смотрит камера.
+   * @param target Целевая позиция в 3D-пространстве.
+   */
+  lookAt(target: THREE.Vector3): void;
+
+  /**
+   * Перемещает камеру в указанную позицию.
+   * @param position Новая позиция камеры.
+   */
+  setPosition(position: THREE.Vector3): void;
+
+  /**
+   * Сбрасывает камеру в начальное состояние (например, после смены объекта наблюдения).
+   */
+  reset(): void;
+
+  /**
+   * Включает/отключает управление камерой (например, при открытии модального окна).
+   * @param enabled true — управление разрешено, false — заблокировано.
+   */
+  setEnabled(enabled: boolean): void;
+
+  /**
+   * Возвращает текущее положение камеры.
+   */
+  getPosition(): THREE.Vector3;
+
+  /**
+   * Возвращает направление, в котором смотрит камера.
+   */
+  getDirection(): THREE.Vector3;
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\object-factory.ts ---
+import * as THREE from "three";
+import { SpaceObject } from "../entities/space-object";
+import { IObjectFactory, ITextureManager } from "./interfaces";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
+
+export class ObjectFactory implements IObjectFactory {
+  private textureManager: ITextureManager;
+
+  constructor(textureManager: ITextureManager) {
+    this.textureManager = textureManager;
+  }
+
+  createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
+    const radiusPx =
+      spaceObject.radius *
+      SIMULATION_CONFIG.SCALE_DIST *
+      SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE;
+
+    const geometry = new THREE.SphereGeometry(radiusPx, 32, 32);
+    let material: THREE.Material;
+
+    if (spaceObject.texture) {
+      const texture = this.textureManager.loadTexture(spaceObject.texture);
+
+      material = new THREE.MeshPhongMaterial({
+        map: texture,
+        bumpMap: texture,
+        bumpScale: 0.05,
+        color: 0xffffff,
+        shininess: 30,
+        specular: new THREE.Color(0x333333),
+      });
+    } else {
+      material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(spaceObject.color),
+        shininess: 5,
+        specular: new THREE.Color(0x333333),
+      });
+    }
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = spaceObject.name;
+
+    return mesh;
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\renderer-core.ts ---
+import * as THREE from "three";
+import { PlatformAdapter } from "../adapters/platform-adapter";
+import { SpaceObject } from "../entities/space-object";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
+import { ISceneManager } from "./interfaces";
+import { ICameraController } from "./interfaces";
+import { IObjectFactory } from "./interfaces";
+
+export class RendererCore {
+  private renderer: THREE.WebGLRenderer;
+  private sceneManager: ISceneManager;
+  private cameraController: ICameraController;
+  private objectFactory: IObjectFactory;
+  private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
+  private fpsElement: HTMLElement | null = null;
+  private platformAdapter: PlatformAdapter;
+
+  constructor(
+    platformAdapter: PlatformAdapter,
+    sceneManager: ISceneManager,
+    cameraController: ICameraController,
+    objectFactory: IObjectFactory
+  ) {
+    this.platformAdapter = platformAdapter;
+    this.sceneManager = sceneManager;
+    this.cameraController = cameraController;
+    this.objectFactory = objectFactory;
+
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: platformAdapter.getCanvas(),
+      antialias: true,
+    });
+  }
+
+  initialize(): void {
+    this.renderer.setPixelRatio(this.platformAdapter.getPixelRatio());
+
+    this.platformAdapter.onResize(() => {
+      const width = this.platformAdapter.getWidth();
+      const height = this.platformAdapter.getHeight();
+      this.renderer.setSize(width, height);
+      this.cameraController.resize(width, height);
+    });
+
+    this.renderer.setSize(
+      this.platformAdapter.getWidth(),
+      this.platformAdapter.getHeight()
+    );
+  }
+
+  setFpsElement(element: HTMLElement): void {
+    this.fpsElement = element;
+  }
+
+  initSpaceObjects(spaceObjects: SpaceObject[]): void {
+    spaceObjects.forEach((obj) => {
+      const mesh = this.objectFactory.createSpaceObject(obj);
+      this.spaceObjectMeshes.set(obj.name, mesh);
+      this.sceneManager.getScene().add(mesh);
+    });
+  }
+
+  updateSpaceObjects(spaceObjects: SpaceObject[]): void {
+    const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
+
+    spaceObjects.forEach((obj) => {
+      const mesh = this.spaceObjectMeshes.get(obj.name);
+
+      if (mesh) {
+        mesh.position.set(
+          obj.pos.x * scaleDist,
+          obj.pos.y * scaleDist,
+          obj.pos.z * scaleDist
+        );
+      }
+    });
+  }
+
+  render(deltaTime: number): void {
+    this.cameraController.update();
+
+    if (this.fpsElement) {
+      const fps = 1000 / deltaTime;
+      this.fpsElement.textContent = `FPS: ${Math.floor(fps)}`;
+    }
+
+    this.renderer.render(
+      this.sceneManager.getScene(),
+      this.cameraController.getCamera()
+    );
+  }
+
+  dispose(): void {
+    this.renderer.dispose();
+
+    this.spaceObjectMeshes.forEach((mesh) => {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    });
+
+    this.spaceObjectMeshes.clear();
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\scene-manager.ts ---
+import * as THREE from "three";
+import { ISceneManager } from "./interfaces";
+import { TextureManager } from "./texture-manager";
+
+export class SceneManager implements ISceneManager {
+  private scene: THREE.Scene;
+  private textureLoader: TextureManager;
+
+  constructor() {
+    this.scene = new THREE.Scene();
+    this.textureLoader = new TextureManager();
+    this.scene.background = new THREE.Color(0x000000);
+
+    this.setupLighting();
+    this.addSpaceBackground();
+  }
+
+  getScene(): THREE.Scene {
+    return this.scene;
+  }
+
+  setupLighting(): void {
+    const pointLight = new THREE.PointLight(0xffffff, 1.5);
+
+    pointLight.position.set(0, 0, 0);
+    this.scene.add(pointLight);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+
+    this.scene.add(ambientLight);
+  }
+
+  addSpaceBackground(): void {
+    const spaceGeometry = new THREE.SphereGeometry(500000, 30, 30);
+    const spaceTexture = this.textureLoader.loadTexture("spacemedium.jpg");
     spaceTexture.anisotropy = 10;
 
     const spaceMaterial = new THREE.MeshBasicMaterial({
@@ -552,142 +1045,37 @@ export class ThreeRenderer {
     space.rotation.z = Math.PI * 0.58;
 
     this.scene.add(space);
+  }
+}
 
-    this.renderer = new THREE.WebGLRenderer({
-      canvas: this.platformAdapter.createCanvas(),
-      antialias: true,
-    });
+--------------------------------------------------
 
-    this.renderer.setPixelRatio(this.platformAdapter.getPixelRatio());
+--- Файл: src\rendering\texture-manager.ts ---
+import * as THREE from "three";
+import { ITextureManager } from "./interfaces";
 
-    this.renderer.setSize(
-      this.platformAdapter.getWidth(),
-      this.platformAdapter.getHeight()
-    );
+export class TextureManager implements ITextureManager {
+  private textureLoader: THREE.TextureLoader;
+  private cache: Map<string, THREE.Texture> = new Map();
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.screenSpacePanning = false;
-    this.controls.minDistance = 50;
-    this.controls.maxDistance = 2000;
+  constructor() {
+    this.textureLoader = new THREE.TextureLoader();
   }
 
-  updateSpaceObjects(spaceObjects: SpaceObject[]): void {
-    spaceObjects.forEach((spaceObject) => {
-      const mesh = this.spaceObjectMeshes.get(spaceObject.name);
-
-      if (!mesh) return;
-
-      const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
-
-      mesh.position.set(
-        spaceObject.pos.x * scaleDist,
-        spaceObject.pos.y * scaleDist,
-        spaceObject.pos.z * scaleDist
-      );
-    });
-  }
-
-  setFpsElement(element: HTMLElement) {
-    this.fpsElement = element;
-  }
-
-  render(deltaTimeMs: number): void {
-    if (this.fpsElement) {
-      const fps = 1000 / deltaTimeMs;
-      this.fpsElement.textContent = `FPS: ${Math.trunc(fps)}`;
-    }
-
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  initSpaceObjects(spaceObjects: SpaceObject[]): void {
-    spaceObjects.forEach((spaceObject) => {
-      const mesh = this.createSpaceObjectMesh(spaceObject);
-      this.scene.add(mesh);
-    });
-  }
-
-  resize(width: number, height: number) {
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
-  }
-
-  private setupLighting() {
-    const pointLight = new THREE.PointLight(0xffffff, 1.5, 50000, 2);
-    pointLight.position.set(0, 0, 0);
-    pointLight.shadow.mapSize.width = 2048;
-    pointLight.shadow.mapSize.height = 2048;
-    pointLight.shadow.camera.near = 0.001;
-    pointLight.shadow.camera.far = 50000;
-    pointLight.castShadow = true;
-    this.scene.add(pointLight);
-
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-    this.scene.add(ambientLight);
-  }
-
-  private createSpaceObjectMesh(spaceObject: SpaceObject): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(
-      spaceObject.radius *
-        SIMULATION_CONFIG.SCALE_DIST *
-        SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE,
-      32,
-      32
-    );
-
-    let texture: THREE.Texture | null = null;
-
-    if (spaceObject.texture) {
-      texture = this.loadTexture(spaceObject.texture);
-      texture.anisotropy = 7;
-    }
-
-    const material = new THREE.MeshPhongMaterial({
-      specular: new THREE.Color(0x333333),
-      ...(texture
-        ? {
-            map: texture,
-            bumpMap: texture,
-            bumpScale: 0.05,
-            color: 0xffffff,
-            shininess: 30,
-          }
-        : {
-            bumpScale: 0,
-            color: new THREE.Color(spaceObject.color),
-            shininess: 5,
-          }),
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = spaceObject.name;
-
-    this.spaceObjectMeshes.set(spaceObject.name, mesh);
-
-    return mesh;
-  }
-
-  private loadTexture(path: string): THREE.Texture {
-    if (this.textureCache.has(path)) {
-      return this.textureCache.get(path)!;
+  loadTexture(path: string): THREE.Texture {
+    if (this.cache.has(path)) {
+      return this.cache.get(path)!;
     }
 
     const texture = this.textureLoader.load(
       `src/textures/${path}`,
-      () => {
-        console.log(`Текстура загружена: ${path}`);
-      },
+      () => console.log(`Текстура загружена: ${path}`),
       undefined,
-      (error) => {
-        console.error(`Ошибка загрузки текстуры: ${path}`, error);
-      }
+      (error) => console.error(`Ошибка загрузки текстуры: ${path}`, error)
     );
 
-    this.textureCache.set(path, texture);
+    texture.anisotropy = 7;
+    this.cache.set(path, texture);
 
     return texture;
   }
@@ -740,26 +1128,12 @@ export class SolarSystem {
 
 --------------------------------------------------
 
---- Файл: src\types\platform-adapter.ts ---
-export interface PlatformAdapter {
-  createCanvas(): HTMLCanvasElement;
-  getWidth(): number;
-  getHeight(): number;
-  getPixelRatio(): number;
-  onResize(callback: () => void): void;
-  offResize(callback: () => void): void;
-  appendToDom(element: HTMLElement): void;
-  appendCanvasToDom(): void;
-  requestAnimationFrame(callback: FrameRequestCallback): void;
-}
-
---------------------------------------------------
-
 ============================================================
 CNHERNEHF ДИРЕКТОРИИ:
 ============================================================
 adapters/
   browser-adapter.ts
+  platform-adapter.ts
 config/
   config-api.ts
   simulation-config.ts
@@ -773,7 +1147,12 @@ physics/
   gravity.ts
   vector.ts
 rendering/
-  three-renderer.ts
+  camera-controller.ts
+  interfaces.ts
+  object-factory.ts
+  renderer-core.ts
+  scene-manager.ts
+  texture-manager.ts
 simulation/
   solar-system.ts
 textures/
@@ -819,4 +1198,3 @@ textures/
   venuslow-min.jpg
   venusmedium-min.jpg
 types/
-  platform-adapter.ts

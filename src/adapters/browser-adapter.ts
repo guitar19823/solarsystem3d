@@ -1,13 +1,16 @@
-import { PlatformAdapter } from "../types/platform-adapter";
+import { PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
-  private resizeObserver: ResizeObserver | null = null;
   private resizeCallbacks: Set<() => void> = new Set();
   private canvas: HTMLCanvasElement | undefined;
 
-  createCanvas(): HTMLCanvasElement {
+  constructor() {
     this.canvas = document.createElement("canvas");
 
+    document.body.appendChild(this.canvas);
+  }
+
+  getCanvas(): HTMLCanvasElement | undefined {
     return this.canvas;
   }
 
@@ -45,5 +48,57 @@ export class BrowserAdapter implements PlatformAdapter {
 
   requestAnimationFrame(callback: FrameRequestCallback): void {
     window.requestAnimationFrame(callback);
+  }
+
+  onZoom(callback: (value: number) => void): void {
+    window.addEventListener("wheel", (e) => {
+      callback(e.deltaY);
+    });
+  }
+
+  onPress(callback: (value: string) => void): void {
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyW") callback("forward");
+      if (e.code === "KeyS") callback("back");
+      if (e.code === "KeyA") callback("left");
+      if (e.code === "KeyD") callback("right");
+      if (e.code === "KeyQ") callback("up");
+      if (e.code === "KeyE") callback("down");
+    });
+  }
+
+  onRelease(callback: (value: string) => void): void {
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "KeyW") callback("forward");
+      if (e.code === "KeyS") callback("back");
+      if (e.code === "KeyA") callback("left");
+      if (e.code === "KeyD") callback("right");
+      if (e.code === "KeyQ") callback("up");
+      if (e.code === "KeyE") callback("down");
+    });
+  }
+
+  onMove(callback: (x: number, y: number) => void): void {
+    this.canvas?.addEventListener("mousemove", (e) => {
+      callback(e.clientX, e.clientY);
+    });
+  }
+
+  onMoveStart(callback: (x: number, y: number) => void): void {
+    this.canvas?.addEventListener("mousedown", (e) => {
+      callback(e.clientX, e.clientY);
+    });
+  }
+
+  onMoveEnd(callback: (x: number, y: number) => void): void {
+    this.canvas?.addEventListener("mouseup", (e) => {
+      callback(e.clientX, e.clientY);
+    });
+  }
+
+  onLeave(callback: (x: number, y: number) => void): void {
+    this.canvas?.addEventListener("mouseleave", (e) => {
+      callback(e.clientX, e.clientY);
+    });
   }
 }
