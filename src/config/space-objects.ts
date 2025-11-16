@@ -1,6 +1,6 @@
 import { Vector3D } from "../physics/vector";
 
-export interface PlanetConfig {
+export interface ISpaceObjectConfig {
   name: string;
   mass: number;
   pos: Vector3D;
@@ -10,7 +10,7 @@ export interface PlanetConfig {
   texture?: string;
 }
 
-export const PLANET_DATA: PlanetConfig[] = [
+export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
   {
     name: "Sun",
     mass: 1.989e30,

@@ -1,27 +1,27 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import { Planet } from "../entities/planet";
+import { SpaceObject } from "../entities/space-object";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { PlatformAdapter } from "../types/platform-adapter";
 
 export class ThreeRenderer {
+  private platformAdapter: PlatformAdapter;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
   private controls: OrbitControls;
-  private planetMeshes: Map<string, THREE.Mesh> = new Map();
+  private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
   private fpsElement: HTMLElement | null = null;
   private textureCache: Map<string, THREE.Texture> = new Map();
   private textureLoader: THREE.TextureLoader;
 
-  constructor(canvas: HTMLCanvasElement, platformAdapter: PlatformAdapter) {
-    // Инициализация сцены
+  constructor(platformAdapter: PlatformAdapter) {
+    this.platformAdapter = platformAdapter;
     this.scene = new THREE.Scene();
     this.textureLoader = new THREE.TextureLoader();
     this.setupLighting();
     this.scene.background = new THREE.Color(0x000000);
 
-    // Камера
     this.camera = new THREE.PerspectiveCamera(
       65,
       platformAdapter.getWidth() / platformAdapter.getHeight(),
@@ -53,16 +53,18 @@ export class ThreeRenderer {
 
     this.scene.add(space);
 
-    // Рендерер
     this.renderer = new THREE.WebGLRenderer({
-      canvas,
+      canvas: this.platformAdapter.createCanvas(),
       antialias: true,
     });
 
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(this.platformAdapter.getPixelRatio());
 
-    // Управление камерой
+    this.renderer.setSize(
+      this.platformAdapter.getWidth(),
+      this.platformAdapter.getHeight()
+    );
+
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
@@ -71,18 +73,18 @@ export class ThreeRenderer {
     this.controls.maxDistance = 2000;
   }
 
-  updatePlanets(planets: Planet[]): void {
-    planets.forEach((planet) => {
-      const mesh = this.planetMeshes.get(planet.name);
+  updateSpaceObjects(spaceObjects: SpaceObject[]): void {
+    spaceObjects.forEach((spaceObject) => {
+      const mesh = this.spaceObjectMeshes.get(spaceObject.name);
 
       if (!mesh) return;
 
       const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
 
       mesh.position.set(
-        planet.pos.x * scaleDist,
-        planet.pos.y * scaleDist,
-        planet.pos.z * scaleDist
+        spaceObject.pos.x * scaleDist,
+        spaceObject.pos.y * scaleDist,
+        spaceObject.pos.z * scaleDist
       );
     });
   }
@@ -101,9 +103,9 @@ export class ThreeRenderer {
     this.renderer.render(this.scene, this.camera);
   }
 
-  initPlanets(planets: Planet[]): void {
-    planets.forEach((planet) => {
-      const mesh = this.createPlanetMesh(planet);
+  initSpaceObjects(spaceObjects: SpaceObject[]): void {
+    spaceObjects.forEach((spaceObject) => {
+      const mesh = this.createSpaceObjectMesh(spaceObject);
       this.scene.add(mesh);
     });
   }
@@ -115,10 +117,6 @@ export class ThreeRenderer {
   }
 
   private setupLighting() {
-    // Окружающее освещение (рассеянное)
-    // const ambientLight = new THREE.AmbientLight(0x050505, 0.2);
-
-    // Дополнительный точечный свет (для объёма)
     const pointLight = new THREE.PointLight(0xffffff, 1.5, 50000, 2);
     pointLight.position.set(0, 0, 0);
     pointLight.shadow.mapSize.width = 2048;
@@ -132,19 +130,19 @@ export class ThreeRenderer {
     this.scene.add(ambientLight);
   }
 
-  private createPlanetMesh(planet: Planet): THREE.Mesh {
+  private createSpaceObjectMesh(spaceObject: SpaceObject): THREE.Mesh {
     const geometry = new THREE.SphereGeometry(
-      planet.radius *
+      spaceObject.radius *
         SIMULATION_CONFIG.SCALE_DIST *
-        SIMULATION_CONFIG.PLANET_RADIUS_SCALE,
+        SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE,
       32,
       32
     );
 
     let texture: THREE.Texture | null = null;
 
-    if (planet.texture) {
-      texture = this.loadTexture(planet.texture);
+    if (spaceObject.texture) {
+      texture = this.loadTexture(spaceObject.texture);
       texture.anisotropy = 7;
     }
 
@@ -160,15 +158,15 @@ export class ThreeRenderer {
           }
         : {
             bumpScale: 0,
-            color: new THREE.Color(planet.color),
+            color: new THREE.Color(spaceObject.color),
             shininess: 5,
           }),
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = planet.name;
+    mesh.name = spaceObject.name;
 
-    this.planetMeshes.set(planet.name, mesh);
+    this.spaceObjectMeshes.set(spaceObject.name, mesh);
 
     return mesh;
   }

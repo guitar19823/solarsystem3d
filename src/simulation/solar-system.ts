@@ -1,20 +1,20 @@
-import { Planet } from "../entities/planet";
-import { PLANET_DATA } from "../config/planet-data";
+import { SpaceObject } from "../entities/space-object";
+import { SPACE_OBJECTS } from "../config/space-objects";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 
 export class SolarSystem {
-  private planets: Planet[] = [];
+  private spaceObjects: SpaceObject[] = [];
   private dt: number;
 
   constructor(dt: number = SIMULATION_CONFIG.DEFAULT_DT) {
     this.dt = dt;
-    this.initPlanets();
+    this.initSpaceObjects();
   }
 
-  private initPlanets() {
-    for (const config of PLANET_DATA) {
-      this.planets.push(
-        new Planet(
+  private initSpaceObjects() {
+    for (const config of SPACE_OBJECTS) {
+      this.spaceObjects.push(
+        new SpaceObject(
           config.name,
           config.mass,
           config.pos,
@@ -27,15 +27,15 @@ export class SolarSystem {
     }
   }
 
-  getPlanets() {
-    return this.planets;
+  getSpaceObjects() {
+    return this.spaceObjects;
   }
 
   step(dt: number = this.dt) {
-    const planetsCopy = [...this.planets];
+    const spaceObjectsCopy = [...this.spaceObjects];
 
-    for (const planet of this.planets) {
-      planet.update(dt, planetsCopy);
+    for (const spaceObject of this.spaceObjects) {
+      spaceObject.update(dt, spaceObjectsCopy);
     }
   }
 }

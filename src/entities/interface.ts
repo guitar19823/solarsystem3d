@@ -1,6 +1,6 @@
 import { Vector3D } from "../physics/vector";
 
-export interface Planet {
+export interface ISpaceObject {
   name: string;
   mass: number;
   pos: Vector3D;

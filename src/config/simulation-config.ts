@@ -1,24 +1,15 @@
 export const SIMULATION_CONFIG = {
-  SIMULATION_DT: 200000, // шаг симуляции (x реального времени)
+  SIMULATION_DT: 1, // шаг симуляции (x реального времени)
   DEFAULT_DT: 86400,
   MAX_DT: 864000, // макс. шаг симуляции (защита от фризов)
 
-  // Сколько пикселей соответствует 1 а.е. (настраивается пользователем)
-  AU_IN_PX: 500,
+  AU_IN_PX: 500, // Сколько пикселей соответствует 1 а.е. (настраивается пользователем)
+  AU: 1.496e11, // 1 а.е. = 1.496e11 м
 
-  _scaleDistCached: 0,
+  OBJECTS_RADIUS_SCALE: 1, // Коэффициент для увеличения радиусов планет (по умолчанию = 1 — строго пропорционально)
 
   // Масштаб для расстояний: 1 м = ? px
   get SCALE_DIST() {
-    // if (!this._scaleDistCached) {
-    //   this._scaleDistCached = this.AU_IN_PX / 1.496e11; // 1 а.е. = 1.496e11 м
-    // }
-
-    // return this._scaleDistCached;
-
-    return this.AU_IN_PX / 1.496e11;
+    return this.AU_IN_PX / this.AU;
   },
-
-  // Коэффициент для увеличения радиусов планет (по умолчанию = 1 — строго пропорционально)
-  PLANET_RADIUS_SCALE: 80,
 };

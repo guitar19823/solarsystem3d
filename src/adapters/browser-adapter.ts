@@ -3,9 +3,12 @@ import { PlatformAdapter } from "../types/platform-adapter";
 export class BrowserAdapter implements PlatformAdapter {
   private resizeObserver: ResizeObserver | null = null;
   private resizeCallbacks: Set<() => void> = new Set();
+  private canvas: HTMLCanvasElement | undefined;
 
   createCanvas(): HTMLCanvasElement {
-    return document.createElement("canvas");
+    this.canvas = document.createElement("canvas");
+
+    return this.canvas;
   }
 
   getWidth(): number {
@@ -14,6 +17,10 @@ export class BrowserAdapter implements PlatformAdapter {
 
   getHeight(): number {
     return Math.max(window.innerHeight, 300); // мин. высота 300px
+  }
+
+  getPixelRatio(): number {
+    return window.devicePixelRatio;
   }
 
   onResize(callback: () => void): void {
@@ -28,6 +35,12 @@ export class BrowserAdapter implements PlatformAdapter {
 
   appendToDom(element: HTMLElement): void {
     document.body.appendChild(element);
+  }
+
+  appendCanvasToDom(): void {
+    if (this.canvas) {
+      document.body.appendChild(this.canvas);
+    }
   }
 
   requestAnimationFrame(callback: FrameRequestCallback): void {

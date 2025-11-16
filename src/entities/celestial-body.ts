@@ -1,7 +1,7 @@
 import { Vector3D } from "../physics/vector";
-import { Planet } from "./planet.interface";
+import { ISpaceObject } from "./interface";
 
-export abstract class CelestialBody implements Planet {
+export abstract class CelestialBody implements ISpaceObject {
   constructor(
     public name: string,
     public mass: number,
@@ -12,5 +12,5 @@ export abstract class CelestialBody implements Planet {
     public texture: string | undefined
   ) {}
 
-  abstract update(dt: number, others: Planet[]): void;
+  abstract update(dt: number, others: ISpaceObject[]): void;
 }

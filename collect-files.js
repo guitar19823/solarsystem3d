@@ -11,6 +11,8 @@ let collectedContent = "";
 // Массив для хранения структуры директорий и файлов
 let structure = [];
 
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png"];
+
 /**
  * Рекурсивно обходит директорию и собирает данные
  * @param {string} dirPath - путь к директории
@@ -30,6 +32,12 @@ function walkDirectory(dirPath, prefix = "") {
     } else {
       // Это файл
       structure.push(prefix + item);
+
+      const ext = path.extname(itemPath).toLowerCase();
+
+      if (IMAGE_EXTENSIONS.includes(ext)) {
+        return;
+      }
 
       try {
         const content = fs.readFileSync(itemPath, "utf8");

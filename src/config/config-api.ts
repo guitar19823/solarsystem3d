@@ -1,5 +1,5 @@
 import { Vector3D } from "../physics/vector";
-import { PLANET_DATA, PlanetConfig } from "./planet-data";
+import { SPACE_OBJECTS, ISpaceObjectConfig } from "./space-objects";
 import { SIMULATION_CONFIG } from "./simulation-config";
 
 export interface SimulationConfig {
@@ -7,11 +7,11 @@ export interface SimulationConfig {
   DEFAULT_DT: number;
   MAX_DT: number;
   AU_IN_PX: number;
-  PLANET_RADIUS_SCALE: number;
+  OBJECTS_RADIUS_SCALE: number;
 }
 
 export class ConfigAPI {
-  private static planetData: PlanetConfig[] = [...PLANET_DATA]; // изначальные данные
+  private static spaceObjects: ISpaceObjectConfig[] = [...SPACE_OBJECTS]; // изначальные данные
 
   static setSimulationSpeed(factor: number): void {
     if (factor <= 0) {
@@ -29,7 +29,6 @@ export class ConfigAPI {
       throw new Error("AU in pixels must be positive");
     }
     SIMULATION_CONFIG.AU_IN_PX = auInPx;
-    SIMULATION_CONFIG._scaleDistCached = 0;
   }
 
   static getScale(): number {
@@ -38,52 +37,55 @@ export class ConfigAPI {
 
   static setPlanetScale(scale: number): void {
     if (scale <= 0) {
-      throw new Error("Planet radius scale must be positive");
+      throw new Error("SpaceObject radius scale must be positive");
     }
-    SIMULATION_CONFIG.PLANET_RADIUS_SCALE = scale;
+    SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE = scale;
   }
 
-  static getPlanetScale(): number {
-    return SIMULATION_CONFIG.PLANET_RADIUS_SCALE;
+  static getSpaceObjectScale(): number {
+    return SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE;
   }
 
-  static addPlanet(config: PlanetConfig): void {
-    const existing = ConfigAPI.getPlanet(config.name);
+  static addSpaceObject(config: ISpaceObjectConfig): void {
+    const existing = ConfigAPI.getSpaceObject(config.name);
     if (existing) {
-      throw new Error(`Planet with name "${config.name}" already exists`);
+      throw new Error(`SpaceObject with name "${config.name}" already exists`);
     }
-    ConfigAPI.planetData.push(config);
+    ConfigAPI.spaceObjects.push(config);
   }
 
-  static removePlanet(name: string): boolean {
-    const index = ConfigAPI.findPlanetIndex(name);
+  static removeSpaceObject(name: string): boolean {
+    const index = ConfigAPI.findSpaceObjectIndex(name);
     if (index === -1) {
       return false;
     }
-    ConfigAPI.planetData.splice(index, 1);
+    ConfigAPI.spaceObjects.splice(index, 1);
     return true;
   }
 
-  static updatePlanet(name: string, updates: Partial<PlanetConfig>): boolean {
-    const planet = ConfigAPI.getPlanet(name);
-    if (!planet) {
+  static updateSpaceObject(
+    name: string,
+    updates: Partial<ISpaceObjectConfig>
+  ): boolean {
+    const spaceObject = ConfigAPI.getSpaceObject(name);
+    if (!spaceObject) {
       return false;
     }
 
-    Object.assign(planet, updates);
+    Object.assign(spaceObject, updates);
     return true;
   }
 
-  static getPlanet(name: string): PlanetConfig | undefined {
-    return ConfigAPI.planetData.find((p) => p.name === name);
+  static getSpaceObject(name: string): ISpaceObjectConfig | undefined {
+    return ConfigAPI.spaceObjects.find((p) => p.name === name);
   }
 
-  static getAllPlanets(): PlanetConfig[] {
-    return [...ConfigAPI.planetData]; // возвращаем копию
+  static getAllSpaceObjects(): ISpaceObjectConfig[] {
+    return [...ConfigAPI.spaceObjects]; // возвращаем копию
   }
 
-  private static findPlanetIndex(name: string): number {
-    return ConfigAPI.planetData.findIndex((p) => p.name === name);
+  private static findSpaceObjectIndex(name: string): number {
+    return ConfigAPI.spaceObjects.findIndex((p) => p.name === name);
   }
 
   static resetSimulationConfig(): void {
@@ -91,12 +93,11 @@ export class ConfigAPI {
     SIMULATION_CONFIG.DEFAULT_DT = 86400;
     SIMULATION_CONFIG.MAX_DT = 864000;
     SIMULATION_CONFIG.AU_IN_PX = 100;
-    SIMULATION_CONFIG.PLANET_RADIUS_SCALE = 1;
-    SIMULATION_CONFIG._scaleDistCached = 0;
+    SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE = 1;
   }
 
-  static resetPlanetData(): void {
-    ConfigAPI.planetData = [
+  static resetSpaceObjectData(): void {
+    ConfigAPI.spaceObjects = [
       {
         name: "Sun",
         mass: 1.989e30,
@@ -105,7 +106,7 @@ export class ConfigAPI {
         color: "yellow",
         radius: 696340000,
       },
-      // ... остальные планеты как в исходном PLANET_DATA
+      // ... остальные планеты как в исходном SPACE_OBJECTS
     ];
   }
 }

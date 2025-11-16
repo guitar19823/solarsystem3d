@@ -6,9 +6,8 @@ import { BrowserAdapter } from "./adapters/browser-adapter";
 import { ConfigAPI } from "./config/config-api";
 
 export function runSimulation(platformAdapter: PlatformAdapter) {
-  const canvas = platformAdapter.createCanvas();
-  const renderer = new ThreeRenderer(canvas, platformAdapter);
-  platformAdapter.appendToDom(canvas);
+  const renderer = new ThreeRenderer(platformAdapter);
+  platformAdapter.appendCanvasToDom();
 
   // Элемент для отображения FPS (создайте в HTML)
   const fpsElement = document.createElement("div");
@@ -20,7 +19,7 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
   renderer.setFpsElement(fpsElement);
 
   const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
-  renderer.initPlanets(system.getPlanets());
+  renderer.initSpaceObjects(system.getSpaceObjects());
 
   let lastTimestamp = 0;
 
@@ -35,7 +34,7 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
     );
 
     system.step(simulationTimeStep);
-    renderer.updatePlanets(system.getPlanets());
+    renderer.updateSpaceObjects(system.getSpaceObjects());
     renderer.render(deltaTime); // передаём deltaTime для расчёта FPS
 
     platformAdapter.requestAnimationFrame(animate);
