@@ -8,7 +8,8 @@ export abstract class CelestialBody implements Planet {
     public pos: Vector3D,
     public vel: Vector3D,
     public color: string,
-    public radius: number
+    public radius: number,
+    public texture: string | undefined
   ) {}
 
   abstract update(dt: number, others: Planet[]): void;

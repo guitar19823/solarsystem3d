@@ -20,7 +20,8 @@ export class SolarSystem {
           config.pos,
           config.vel,
           config.color,
-          config.radius
+          config.radius,
+          config.texture
         )
       );
     }

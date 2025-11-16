@@ -7,4 +7,5 @@ export interface Planet {
   vel: Vector3D;
   color: string;
   radius: number; // в метрах
+  texture?: string;
 }

@@ -7,6 +7,7 @@ export interface PlanetConfig {
   vel: Vector3D;
   color: string;
   radius: number; // в метрах
+  texture?: string;
 }
 
 export const PLANET_DATA: PlanetConfig[] = [
@@ -15,7 +16,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     mass: 1.989e30,
     pos: new Vector3D(0, 0, 0),
     vel: new Vector3D(0, 0, 0),
-    color: "yellow",
+    color: "white",
     radius: 696340000,
   },
   {
@@ -25,6 +26,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 47362, 0),
     color: "gray",
     radius: 2439700,
+    texture: "mercurylow-min.jpg",
   },
   {
     name: "Venus",
@@ -33,6 +35,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 35020, 0),
     color: "orange",
     radius: 6051800,
+    texture: "venuslow-min.jpg",
   },
   {
     name: "Earth",
@@ -41,6 +44,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 29783, 0),
     color: "blue",
     radius: 6371000,
+    texture: "earthlow-min.jpg",
   },
   {
     name: "Mars",
@@ -49,6 +53,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 24077, 0),
     color: "red",
     radius: 3389500,
+    texture: "marslow-min.jpg",
   },
   {
     name: "Jupiter",
@@ -57,6 +62,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 13070, 0),
     color: "brown",
     radius: 69911000,
+    texture: "jupiterlow-min.jpg",
   },
   {
     name: "Saturn",
@@ -65,6 +71,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 9690, 0),
     color: "gold",
     radius: 58232000,
+    texture: "saturnlow-min.jpg",
   },
   {
     name: "Uranus",
@@ -73,6 +80,7 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 6810, 0),
     color: "lightblue",
     radius: 25362000,
+    texture: "uranuslow-min.jpg",
   },
   {
     name: "Neptune",
@@ -81,5 +89,6 @@ export const PLANET_DATA: PlanetConfig[] = [
     vel: new Vector3D(0, 5430, 0),
     color: "darkblue",
     radius: 24622000,
+    texture: "neptunelow-min.jpg",
   },
 ];

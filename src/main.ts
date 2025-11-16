@@ -7,7 +7,7 @@ import { ConfigAPI } from "./config/config-api";
 
 export function runSimulation(platformAdapter: PlatformAdapter) {
   const canvas = platformAdapter.createCanvas();
-  const renderer = new ThreeRenderer(canvas);
+  const renderer = new ThreeRenderer(canvas, platformAdapter);
   platformAdapter.appendToDom(canvas);
 
   // Элемент для отображения FPS (создайте в HTML)
