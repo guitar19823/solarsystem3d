@@ -32,7 +32,7 @@ export class SceneManager implements ISceneManager {
 
   addSpaceBackground(): void {
     const spaceGeometry = new THREE.SphereGeometry(500000, 30, 30);
-    const spaceTexture = this.textureLoader.loadTexture("spacemedium.jpg");
+    const spaceTexture = this.textureLoader.loadTexture("spacehigh.jpg");
     spaceTexture.anisotropy = 10;
 
     const spaceMaterial = new THREE.MeshBasicMaterial({
