@@ -1,4 +1,5 @@
 export interface PlatformAdapter {
+  getMainCanvas(): HTMLCanvasElement | undefined;
   getCanvas(): HTMLCanvasElement | undefined;
   getWidth(): number;
   getHeight(): number;

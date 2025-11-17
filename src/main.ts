@@ -69,14 +69,51 @@ function initControls() {
   ) as HTMLInputElement;
   const speedValue = document.getElementById("speed-value");
 
-  speedSlider.value = SIMULATION_CONFIG.SIMULATION_DT.toString();
-
   if (speedValue) {
-    speedValue.textContent = SIMULATION_CONFIG.SIMULATION_DT.toString();
+    const getSimulationSpeed = ConfigAPI.getSimulationSpeed();
+    speedSlider.value = getSimulationSpeed.toString();
+    speedValue.textContent = getSimulationSpeed.toString();
+
     speedSlider.addEventListener("input", () => {
       const value = parseInt(speedSlider.value, 10);
       ConfigAPI.setSimulationSpeed(value);
       speedValue.textContent = value.toString();
+    });
+  }
+
+  // Управление масштабом меток (labelScaleFactor)
+  const labelScaleSlider = document.getElementById(
+    "label-scale-slider"
+  ) as HTMLInputElement;
+  const labelScaleValue = document.getElementById("label-scale-value");
+
+  if (labelScaleSlider && labelScaleValue) {
+    const labelScaleFactor = ConfigAPI.getLabelScaleFactor().toString();
+    labelScaleSlider.value = labelScaleFactor;
+    labelScaleValue.textContent = labelScaleFactor;
+
+    labelScaleSlider.addEventListener("input", () => {
+      const value = parseFloat(labelScaleSlider.value);
+      ConfigAPI.setLabelScaleFactor(value);
+      labelScaleValue.textContent = value.toString();
+    });
+  }
+
+  // Управление speedFactor (дополнительный множитель скорости)
+  const speedFactorSlider = document.getElementById(
+    "speed-factor-slider"
+  ) as HTMLInputElement;
+  const speedFactorValue = document.getElementById("speed-factor-value");
+
+  if (speedFactorSlider && speedFactorValue) {
+    const speedFactor = ConfigAPI.getSpeedFactor().toString();
+    speedFactorSlider.value = speedFactor;
+    speedFactorValue.textContent = speedFactor;
+
+    speedFactorSlider.addEventListener("input", () => {
+      const value = parseFloat(speedFactorSlider.value);
+      ConfigAPI.setSpeedFactor(value);
+      speedFactorValue.textContent = value.toString();
     });
   }
 }

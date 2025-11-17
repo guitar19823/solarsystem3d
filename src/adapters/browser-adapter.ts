@@ -10,8 +10,12 @@ export class BrowserAdapter implements PlatformAdapter {
     document.body.appendChild(this.canvas);
   }
 
-  getCanvas(): HTMLCanvasElement | undefined {
+  getMainCanvas(): HTMLCanvasElement | undefined {
     return this.canvas;
+  }
+
+  getCanvas(): HTMLCanvasElement | undefined {
+    return document.createElement("canvas");
   }
 
   getWidth(): number {

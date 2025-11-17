@@ -46,9 +46,21 @@
 <body>
   <div class="controls">
     <div class="control-group">
-      <label>Скорость симуляции (x реального времени)</label>
+      <label>Скорость симуляции</label>
       <input type="range" id="speed-slider" min="1" max="1000000" step="100">
       <div class="value" id="speed-value">0</div>
+    </div>
+
+    <div class="control-group">
+      <label>Размер меток</label>
+      <input type="range" id="label-scale-slider" min="1" max="10" step="1">
+      <div class="value" id="label-scale-value">0</div>
+    </div>
+
+    <div class="control-group">
+      <label>Множитель скорости</label>
+      <input type="range" id="speed-factor-slider" min="1" max="1000" step="1">
+      <div class="value" id="speed-factor-value">0</div>
     </div>
   </div>
   <script type="module" src="/src/main.ts"></script>

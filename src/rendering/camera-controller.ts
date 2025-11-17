@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { ICameraController } from "./interfaces";
 import { PlatformAdapter } from "../adapters/platform-adapter";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
@@ -119,7 +120,7 @@ export class CameraController implements ICameraController {
         .addScaledVector(up, dy)
         .addScaledVector(cameraDirection, dz);
 
-      move.multiplyScalar(this.moveSpeed * 0.0001);
+      move.multiplyScalar(this.moveSpeed * SIMULATION_CONFIG.SPEED_FACTOR);
 
       this.camera.position.add(move);
       this.target.add(move);

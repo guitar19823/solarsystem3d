@@ -12,6 +12,7 @@ export class RendererCore {
   private cameraController: ICameraController;
   private objectFactory: IObjectFactory;
   private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
+  private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
   private fpsElement: HTMLElement | null = null;
   private platformAdapter: PlatformAdapter;
 
@@ -27,7 +28,7 @@ export class RendererCore {
     this.objectFactory = objectFactory;
 
     this.renderer = new THREE.WebGLRenderer({
-      canvas: platformAdapter.getCanvas(),
+      canvas: platformAdapter.getMainCanvas(),
       antialias: true,
     });
   }
@@ -53,10 +54,34 @@ export class RendererCore {
   }
 
   initSpaceObjects(spaceObjects: SpaceObject[]): void {
+    const background = this.objectFactory.createSpaceBackground();
+    this.sceneManager.getScene().add(background);
+
     spaceObjects.forEach((obj) => {
-      const mesh = this.objectFactory.createSpaceObject(obj);
-      this.spaceObjectMeshes.set(obj.name, mesh);
-      this.sceneManager.getScene().add(mesh);
+      if (obj.name === "Sun") {
+        const mesh = this.objectFactory.createSunMaterial(obj);
+        const glowMesh = this.objectFactory.createGlowMaterial(obj, mesh);
+
+        this.spaceObjectMeshes.set(obj.name, mesh);
+        this.spaceObjectMeshes.set("SunGlow", glowMesh);
+        this.sceneManager.getScene().add(mesh);
+        this.sceneManager.getScene().add(glowMesh);
+      } else {
+        const mesh = this.objectFactory.createSpaceObject(obj);
+
+        this.spaceObjectMeshes.set(obj.name, mesh);
+        this.sceneManager.getScene().add(mesh);
+      }
+
+      const labelSprite = this.objectFactory.createLabelSprite(
+        obj.name,
+        this.platformAdapter
+      );
+
+      if (labelSprite) {
+        this.spaceObjectLabels.set(obj.name, labelSprite);
+        this.sceneManager.getScene().add(labelSprite);
+      }
     });
   }
 
@@ -65,18 +90,44 @@ export class RendererCore {
 
     spaceObjects.forEach((obj) => {
       const mesh = this.spaceObjectMeshes.get(obj.name);
+      const label = this.spaceObjectLabels.get(obj.name);
 
-      if (mesh) {
-        mesh.position.set(
-          obj.pos.x * scaleDist,
-          obj.pos.y * scaleDist,
-          obj.pos.z * scaleDist
-        );
+      if (!mesh) {
+        return;
+      }
+
+      mesh.position.set(
+        obj.pos.x * scaleDist,
+        obj.pos.y * scaleDist,
+        obj.pos.z * scaleDist
+      );
+
+      if (label) {
+        label.position.copy(mesh.position);
+        label.position.y += obj.radius * scaleDist * 1.3;
+
+        const distance = this.cameraController
+          .getCamera()
+          .position.distanceTo(label.position);
+
+        label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
       }
     });
+
+    const glowMesh = this.spaceObjectMeshes.get("SunGlow");
+
+    if (glowMesh) {
+      glowMesh.lookAt(this.cameraController.getCamera().position);
+    }
   }
 
   render(deltaTime: number): void {
+    const sunMaterial = this.objectFactory.getSunMaterial();
+
+    if (sunMaterial) {
+      sunMaterial.uniforms.uTime.value += deltaTime * 0.001;
+    }
+
     this.cameraController.update();
 
     if (this.fpsElement) {
@@ -99,5 +150,13 @@ export class RendererCore {
     });
 
     this.spaceObjectMeshes.clear();
+
+    this.spaceObjectLabels.forEach((sprite) => {
+      sprite.material.map?.dispose();
+      sprite.material.dispose();
+      this.sceneManager.getScene().remove(sprite);
+    });
+
+    this.spaceObjectLabels.clear();
   }
 }

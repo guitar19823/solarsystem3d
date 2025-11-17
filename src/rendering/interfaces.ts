@@ -1,12 +1,21 @@
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
+import { PlatformAdapter } from "../adapters/platform-adapter";
 
 export interface ITextureManager {
   loadTexture(path: string): THREE.Texture;
 }
 
 export interface IObjectFactory {
+  createSunMaterial(spaceObject: SpaceObject): THREE.Mesh;
+  createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh): THREE.Mesh;
   createSpaceObject(spaceObject: SpaceObject): THREE.Mesh;
+  createSpaceBackground(): THREE.Mesh;
+  createLabelSprite(
+    text: string,
+    platformAdapter: PlatformAdapter
+  ): THREE.Sprite | undefined;
+  getSunMaterial(): THREE.ShaderMaterial | undefined;
 }
 
 export interface ISceneManager {

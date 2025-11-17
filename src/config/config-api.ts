@@ -35,7 +35,7 @@ export class ConfigAPI {
     return SIMULATION_CONFIG.AU_IN_PX;
   }
 
-  static setPlanetScale(scale: number): void {
+  static setSpaceObjectScale(scale: number): void {
     if (scale <= 0) {
       throw new Error("SpaceObject radius scale must be positive");
     }
@@ -44,6 +44,28 @@ export class ConfigAPI {
 
   static getSpaceObjectScale(): number {
     return SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE;
+  }
+
+  static getLabelScaleFactor(): number {
+    return SIMULATION_CONFIG.LABEL_SCALE_FATOR;
+  }
+
+  static setLabelScaleFactor(factor: number): void {
+    if (factor <= 0) {
+      throw new Error("Label scale factor must be positive");
+    }
+    SIMULATION_CONFIG.LABEL_SCALE_FATOR = factor;
+  }
+
+  static getSpeedFactor(): number {
+    return SIMULATION_CONFIG.SPEED_FACTOR * 10000000;
+  }
+
+  static setSpeedFactor(factor: number): void {
+    if (factor <= 0) {
+      throw new Error("Label scale factor must be positive");
+    }
+    SIMULATION_CONFIG.SPEED_FACTOR = factor / 10000000;
   }
 
   static addSpaceObject(config: ISpaceObjectConfig): void {
