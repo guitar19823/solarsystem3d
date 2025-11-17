@@ -39,6 +39,8 @@ export class ObjectFactory implements IObjectFactory {
 
     const sunMesh = new THREE.Mesh(sunGeometry, this.sunMaterial);
     sunMesh.name = spaceObject.name;
+    sunMesh.castShadow = false;
+    sunMesh.receiveShadow = false;
 
     return sunMesh;
   }
@@ -58,53 +60,22 @@ export class ObjectFactory implements IObjectFactory {
 
     const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
     glowMesh.position.copy(mesh.position);
+    glowMesh.castShadow = false;
+    glowMesh.receiveShadow = false;
 
     return glowMesh;
   }
 
   createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
-    const geometry = new THREE.SphereGeometry(
-      this.calcRadiusPx(spaceObject.radius),
-      32,
-      32
+    return this.getSpaceObjectMesh(
+      new THREE.SphereGeometry(this.calcRadiusPx(spaceObject.radius), 32, 32),
+      this.getSpaceObjectMaterial(spaceObject),
+      spaceObject
     );
-
-    if (spaceObject.texture) {
-      const texture = this.textureManager.loadTexture(spaceObject.texture);
-
-      const material = new THREE.MeshPhongMaterial({
-        map: texture,
-        bumpMap: texture,
-        bumpScale: 0.05,
-        color: 0xffffff,
-        shininess: 30,
-        specular: new THREE.Color(0x333333),
-      });
-
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.name = spaceObject.name;
-
-      return mesh;
-    }
-
-    const material = new THREE.MeshPhongMaterial({
-      color: new THREE.Color(spaceObject.color),
-      shininess: 5,
-      specular: new THREE.Color(0x333333),
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = spaceObject.name;
-
-    return mesh;
-  }
-
-  getSunMaterial() {
-    return this.sunMaterial;
   }
 
   createSpaceBackground(): THREE.Mesh {
-    const spaceGeometry = new THREE.SphereGeometry(500000, 30, 30);
+    const spaceGeometry = new THREE.SphereGeometry(500000, 100, 100);
     const spaceTexture = this.textureManager.loadTexture("spacehigh.jpg");
     spaceTexture.anisotropy = 10;
 
@@ -129,7 +100,7 @@ export class ObjectFactory implements IObjectFactory {
     platformAdapter: PlatformAdapter
   ): THREE.Sprite | undefined {
     // Создаём canvas для текста
-    const canvas = platformAdapter.getCanvas();
+    const canvas = platformAdapter.getCanvasWithoutAddToDom();
 
     if (!canvas) return;
 
@@ -155,6 +126,44 @@ export class ObjectFactory implements IObjectFactory {
     const sprite = new THREE.Sprite(material);
 
     return sprite;
+  }
+
+  getSunMaterial() {
+    return this.sunMaterial;
+  }
+
+  private getSpaceObjectMaterial(spaceObject: SpaceObject) {
+    if (spaceObject.texture) {
+      const texture = this.textureManager.loadTexture(spaceObject.texture);
+
+      return new THREE.MeshPhongMaterial({
+        map: texture,
+        bumpMap: texture,
+        bumpScale: 0.05,
+        color: 0xffffff,
+        shininess: 30,
+        specular: new THREE.Color(0x333333),
+      });
+    }
+
+    return new THREE.MeshPhongMaterial({
+      color: new THREE.Color(spaceObject.color),
+      shininess: 5,
+      specular: new THREE.Color(0x333333),
+    });
+  }
+
+  private getSpaceObjectMesh(
+    geometry: THREE.SphereGeometry,
+    material: THREE.MeshPhongMaterial,
+    spaceObject: SpaceObject
+  ) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = spaceObject.name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    return mesh;
   }
 
   private calcRadiusPx(radius: number) {

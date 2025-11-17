@@ -1,5 +1,154 @@
 
---- Файл: src/adapters/browser-adapter.ts ---
+--- Файл: src\ shaders\glow-shader.ts ---
+export const GlowShader = {
+  uniforms: {
+    color: { value: [1.0, 1.0, 1.0] },
+    radius: { value: 0.5 },
+  },
+
+  vertexShader: `
+    varying vec2 vUv;
+
+
+    void main() {
+      vUv = uv; // uv — встроенный атрибут Three.js
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+
+  fragmentShader: `
+    uniform vec3 color;
+    uniform float radius;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 center = vec2(0.5, 0.5);
+      vec2 distVec = vUv - center;
+      float distance = length(distVec);
+      float normalizedDist = distance / radius;
+
+      float alpha = 1.0 - smoothstep(0.0, 1.0, normalizedDist);
+      gl_FragColor = vec4(color, alpha);
+    }
+  `,
+};
+
+--------------------------------------------------
+
+--- Файл: src\ shaders\sun-shader.ts ---
+export const SunShader = {
+  uniforms: {
+    uTime: { value: 0 },
+    uTexture: { value: null },
+    uNormalMap: { value: null },
+    uEmissiveMap: { value: null },
+    uScale: { value: 1.0 },
+    uGlowIntensity: { value: 1.5 },
+    uNoiseSpeed: { value: 0.3 },
+    uGlowRadius: { value: 0.15 }, // Ширина свечения (15% от радиуса)
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vNormal;
+
+    void main() {
+      vUv = uv;
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision mediump float;
+
+    uniform sampler2D uTexture;
+    uniform sampler2D uNormalMap;
+    uniform sampler2D uEmissiveMap;
+    uniform float uTime;
+    uniform float uScale;
+    uniform float uGlowIntensity;
+    uniform float uNoiseSpeed;
+    uniform float uGlowRadius; // Объявляем униформу для ширины свечения
+
+    varying vec2 vUv;
+    varying vec3 vNormal;
+
+    // Генератор шума
+    float rand(vec2 co) {
+        return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    float noise(vec2 st) {
+        vec2 i = floor(st);
+        vec2 f = fract(st);
+
+        float a = rand(i);
+        float b = rand(i + vec2(1.0, 0.0));
+        float c = rand(i + vec2(0.0, 1.0));
+        float d = rand(i + vec2(1.0, 1.0));
+
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.y * u.x;
+    }
+
+    void main() {
+        // Базовая текстура
+        vec4 color = texture2D(uTexture, vUv * uScale);
+
+        // Карта нормалей
+        vec3 normalMap = texture2D(uNormalMap, vUv * uScale).rgb;
+        normalMap = normalMap * 2.0 - 1.0;
+        vec3 normal = normalize(vNormal + normalMap * 0.1);
+
+
+        // Эмиссивная карта
+        vec4 emissive = texture2D(uEmissiveMap, vUv * uScale);
+        color.rgb += emissive.rgb * uGlowIntensity;
+        color.rgb *= 1.0 + emissive.a * 0.5;
+
+
+        // Анимация грануляции
+        float noiseValue = noise(vUv * 10.0 + uTime * uNoiseSpeed);
+        color.rgb *= 0.95 + noiseValue * 0.1;
+
+
+        // Эффект короны (свечение по краям)
+        float rim = max(0.0, 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0)));
+        rim = pow(rim, 3.0) * uGlowIntensity;
+        color.rgb += vec3(1.0, 0.7, 0.3) * rim;
+
+
+        // === СВЕЧЕНИЕ ВОКРУГ СОЛНЦА ===
+        vec2 centerUV = vUv * 2.0 - vec2(1.0); // Нормализуем UV в [-1, 1]
+        float distanceFromCenter = length(centerUV); // Расстояние от центра
+
+
+        float sunEdge = 1.0;                  // Край Солнца (в нормализованных координатах)
+        float glowWidth = uGlowRadius;         // Ширина свечения из униформы
+
+
+        // Маска: плавный переход от края Солнца наружу
+        float glowMask = smoothstep(
+            sunEdge,
+            sunEdge + glowWidth,
+            distanceFromCenter
+        );
+
+        // Цвет свечения (можно менять под стиль)
+        vec3 glowColor = vec3(1.0, 0.6, 0.2); // Тёплый оранжевый
+
+
+        // Добавляем свечение к основному цвету
+        color.rgb += glowColor * 2.0 * (1.0 - glowMask);
+
+
+        gl_FragColor = color;
+    }
+  `,
+};
+
+--------------------------------------------------
+
+--- Файл: src\adapters\browser-adapter.ts ---
 import { PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
@@ -111,7 +260,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
 --------------------------------------------------
 
---- Файл: src/adapters/platform-adapter.ts ---
+--- Файл: src\adapters\platform-adapter.ts ---
 export interface PlatformAdapter {
   getMainCanvas(): HTMLCanvasElement | undefined;
   getCanvas(): HTMLCanvasElement | undefined;
@@ -134,7 +283,7 @@ export interface PlatformAdapter {
 
 --------------------------------------------------
 
---- Файл: src/config/config-api.ts ---
+--- Файл: src\config\config-api.ts ---
 import { Vector3D } from "../physics/vector";
 import { SPACE_OBJECTS, ISpaceObjectConfig } from "./space-objects";
 import { SIMULATION_CONFIG } from "./simulation-config";
@@ -272,7 +421,7 @@ export class ConfigAPI {
 
 --------------------------------------------------
 
---- Файл: src/config/simulation-config.ts ---
+--- Файл: src\config\simulation-config.ts ---
 export const SIMULATION_CONFIG = {
   SIMULATION_DT: 1, // шаг симуляции (x реального времени)
   DEFAULT_DT: 86400,
@@ -293,7 +442,7 @@ export const SIMULATION_CONFIG = {
 
 --------------------------------------------------
 
---- Файл: src/config/space-objects.ts ---
+--- Файл: src\config\space-objects.ts ---
 import { Vector3D } from "../physics/vector";
 
 export interface ISpaceObjectConfig {
@@ -391,7 +540,7 @@ export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
 
 --------------------------------------------------
 
---- Файл: src/entities/celestial-body.ts ---
+--- Файл: src\entities\celestial-body.ts ---
 import { Vector3D } from "../physics/vector";
 import { ISpaceObject } from "./interface";
 
@@ -411,7 +560,7 @@ export abstract class CelestialBody implements ISpaceObject {
 
 --------------------------------------------------
 
---- Файл: src/entities/interface.ts ---
+--- Файл: src\entities\interface.ts ---
 import { Vector3D } from "../physics/vector";
 
 export interface ISpaceObject {
@@ -426,7 +575,7 @@ export interface ISpaceObject {
 
 --------------------------------------------------
 
---- Файл: src/entities/space-object.ts ---
+--- Файл: src\entities\space-object.ts ---
 import { CelestialBody } from "./celestial-body";
 import { GravityCalculator } from "../physics/gravity";
 
@@ -452,7 +601,7 @@ export class SpaceObject extends CelestialBody {
 
 --------------------------------------------------
 
---- Файл: src/main.ts ---
+--- Файл: src\main.ts ---
 import * as THREE from "three";
 import { PlatformAdapter } from "./adapters/platform-adapter";
 import { BrowserAdapter } from "./adapters/browser-adapter";
@@ -579,7 +728,7 @@ initControls();
 
 --------------------------------------------------
 
---- Файл: src/physics/gravity.ts ---
+--- Файл: src\physics\gravity.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "./vector";
 
@@ -623,7 +772,7 @@ export class GravityCalculator {
 
 --------------------------------------------------
 
---- Файл: src/physics/vector.ts ---
+--- Файл: src\physics\vector.ts ---
 export interface Vector {
   x: number;
   y: number;
@@ -652,7 +801,7 @@ export class Vector3D implements Vector {
 
 --------------------------------------------------
 
---- Файл: src/rendering/camera-controller.ts ---
+--- Файл: src\rendering\camera-controller.ts ---
 import * as THREE from "three";
 import { ICameraController } from "./interfaces";
 import { PlatformAdapter } from "../adapters/platform-adapter";
@@ -686,6 +835,75 @@ export class CameraController implements ICameraController {
 
     this.setupEvents(platformAdapter);
     this.updateCamera();
+  }
+
+  update(): void {
+    this.applyDamping();
+    this.updateCameraPosition();
+    this.updateCamera();
+  }
+
+  smoothMoveTo(position: THREE.Vector3, duration: number = 1000) {
+    const startPosition = this.camera.position.clone();
+    const targetPosition = position;
+    const startTime = performance.now();
+
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const t = Math.min(elapsed / duration, 1);
+
+      this.camera.position.lerpVectors(startPosition, targetPosition, t);
+      this.target.lerpVectors(startPosition, targetPosition, t);
+
+      this.updateCamera();
+
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }
+
+  resize(width: number, height: number): void {
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+  }
+
+  getCamera(): THREE.PerspectiveCamera {
+    return this.camera;
+  }
+
+  lookAt(target: THREE.Vector3): void {
+    this.target.copy(target);
+    this.updateCamera();
+  }
+
+  setPosition(position: THREE.Vector3): void {
+    this.camera.position.copy(position);
+    this.target.copy(position);
+    this.updateCamera();
+  }
+
+  reset(): void {
+    this.yaw = 0;
+    this.pitch = 0;
+    this.target.set(0, 0, 0);
+    this.velocity.set(0, 0);
+    this.updateCamera();
+  }
+
+  setEnabled(enabled: boolean): void {}
+
+  getPosition(): THREE.Vector3 {
+    return this.camera.position;
+  }
+
+  getDirection(): THREE.Vector3 {
+    const direction = new THREE.Vector3();
+    this.camera.getWorldDirection(direction);
+
+    return direction;
   }
 
   private setupEvents(platformAdapter: PlatformAdapter): void {
@@ -725,12 +943,6 @@ export class CameraController implements ICameraController {
     platformAdapter.onRelease((value) => {
       this.commands.delete(value);
     });
-  }
-
-  update(): void {
-    this.applyDamping();
-    this.updateCameraPosition();
-    this.updateCamera();
   }
 
   private applyDamping(): void {
@@ -809,52 +1021,11 @@ export class CameraController implements ICameraController {
         .add(new THREE.Vector3(0, 0, -1).applyMatrix4(rotationMatrix))
     );
   }
-
-  resize(width: number, height: number): void {
-    this.camera.aspect = width / height;
-    this.camera.updateProjectionMatrix();
-  }
-
-  getCamera(): THREE.PerspectiveCamera {
-    return this.camera;
-  }
-
-  lookAt(target: THREE.Vector3): void {
-    this.target.copy(target);
-    this.updateCamera();
-  }
-
-  setPosition(position: THREE.Vector3): void {
-    this.camera.position.copy(position);
-    this.target.copy(position);
-    this.updateCamera();
-  }
-
-  reset(): void {
-    this.yaw = 0;
-    this.pitch = 0;
-    this.target.set(0, 0, 0);
-    this.velocity.set(0, 0);
-    this.updateCamera();
-  }
-
-  setEnabled(enabled: boolean): void {}
-
-  getPosition(): THREE.Vector3 {
-    return this.camera.position;
-  }
-
-  getDirection(): THREE.Vector3 {
-    const direction = new THREE.Vector3();
-    this.camera.getWorldDirection(direction);
-
-    return direction;
-  }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/interfaces.ts ---
+--- Файл: src\rendering\interfaces.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { PlatformAdapter } from "../adapters/platform-adapter";
@@ -864,12 +1035,15 @@ export interface ITextureManager {
 }
 
 export interface IObjectFactory {
+  createSunMaterial(spaceObject: SpaceObject): THREE.Mesh;
+  createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh): THREE.Mesh;
   createSpaceObject(spaceObject: SpaceObject): THREE.Mesh;
   createSpaceBackground(): THREE.Mesh;
   createLabelSprite(
     text: string,
     platformAdapter: PlatformAdapter
   ): THREE.Sprite | undefined;
+  getSunMaterial(): THREE.ShaderMaterial | undefined;
 }
 
 export interface ISceneManager {
@@ -878,109 +1052,205 @@ export interface ISceneManager {
 }
 
 export interface ICameraController {
-  /**
-   * Обновляет состояние камеры (например, применяет damping, обрабатывает ввод).
-   */
   update(): void;
-
-  /**
-   * Изменяет размеры viewport (при ресайзе окна).
-   * @param width Новая ширина в пикселях.
-   * @param height Новая высота в пикселях.
-   */
   resize(width: number, height: number): void;
-
-  /**
-   * Возвращает текущую камеру Three.js.
-   */
   getCamera(): THREE.PerspectiveCamera;
-
-  /**
-   * Устанавливает точку, на которую смотрит камера.
-   * @param target Целевая позиция в 3D-пространстве.
-   */
   lookAt(target: THREE.Vector3): void;
-
-  /**
-   * Перемещает камеру в указанную позицию.
-   * @param position Новая позиция камеры.
-   */
   setPosition(position: THREE.Vector3): void;
-
-  /**
-   * Сбрасывает камеру в начальное состояние (например, после смены объекта наблюдения).
-   */
   reset(): void;
-
-  /**
-   * Включает/отключает управление камерой (например, при открытии модального окна).
-   * @param enabled true — управление разрешено, false — заблокировано.
-   */
   setEnabled(enabled: boolean): void;
-
-  /**
-   * Возвращает текущее положение камеры.
-   */
   getPosition(): THREE.Vector3;
-
-  /**
-   * Возвращает направление, в котором смотрит камера.
-   */
   getDirection(): THREE.Vector3;
+  smoothMoveTo(position: THREE.Vector3, duration?: number): void;
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/object-factory.ts ---
+--- Файл: src\rendering\mini-map.ts ---
+import * as THREE from "three";
+import { SpaceObject } from "../entities/space-object";
+import { Vector3D } from "../physics/vector";
+import { PlatformAdapter } from "../adapters/platform-adapter";
+
+export class MiniMap {
+  private container: HTMLCanvasElement | undefined;
+  private context: CanvasRenderingContext2D;
+  private width: number = 200;
+  private height: number = 200;
+  private scale: number = 0.00000000002; // масштаб: 1 а.е. = 0.1 пикселя
+  private centerX: number;
+  private centerY: number;
+
+  constructor(platformAdapter: PlatformAdapter) {
+    this.container = platformAdapter.getCanvas();
+
+    this.container.width = this.width;
+    this.container.height = this.height;
+    this.context = this.container.getContext("2d")!;
+
+    this.centerX = this.width / 2;
+    this.centerY = this.height / 2;
+
+    // Стилизация контейнера
+    this.container.style.position = "absolute";
+    this.container.style.bottom = "20px";
+    this.container.style.left = "20px";
+    this.container.style.borderRadius = "8px";
+    this.container.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+    this.container.style.pointerEvents = "none";
+  }
+
+  update(objects: SpaceObject[]): void {
+    this.clear();
+    this.drawOrbits(objects);
+    this.drawObjects(objects);
+  }
+
+  private clear(): void {
+    this.context.clearRect(0, 0, this.width, this.height);
+  }
+
+  private drawOrbits(objects: SpaceObject[]): void {
+    const sunPos = objects.find((o) => o.name === "Sun")?.pos || new Vector3D();
+
+    objects.forEach((obj) => {
+      if (obj.name === "Sun") return;
+
+      const dx = obj.pos.x - sunPos.x;
+      const dy = obj.pos.y - sunPos.y;
+      const radius = Math.sqrt(dx * dx + dy * dy) * this.scale;
+
+      this.context.beginPath();
+      this.context.ellipse(
+        this.centerX,
+        this.centerY,
+        radius,
+        radius,
+        0,
+        0,
+        2 * Math.PI
+      );
+      this.context.strokeStyle = "rgba(255, 255, 255, 0.2)";
+      this.context.lineWidth = 0.5;
+      this.context.stroke();
+    });
+  }
+
+  private drawObjects(objects: SpaceObject[]): void {
+    const sunPos = objects.find((o) => o.name === "Sun")?.pos || new Vector3D();
+
+    objects.forEach((obj) => {
+      const dx = obj.pos.x - sunPos.x;
+      const dy = obj.pos.y - sunPos.y;
+      const x = this.centerX + dx * this.scale;
+      const y = this.centerY + dy * this.scale;
+
+      const size = Math.max(2, obj.radius * this.scale);
+
+      // Рисуем планету
+      this.context.beginPath();
+      this.context.arc(x, y, size, 0, 2 * Math.PI);
+      this.context.fillStyle = obj.color;
+      this.context.fill();
+
+      // Подпись
+      this.context.font = "8px sans-serif";
+      this.context.fillStyle = "white";
+      this.context.textAlign = "center";
+      this.context.fillText(obj.name, x, y + size + 10);
+    });
+  }
+
+  render(): void {
+    // В данном случае рендер происходит через canvas API автоматически
+  }
+
+  getDOMElement(): HTMLElement {
+    return this.container;
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\object-factory.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { IObjectFactory, ITextureManager } from "./interfaces";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { PlatformAdapter } from "../adapters/platform-adapter";
+import { SunShader } from "../ shaders/sun-shader";
+import { GlowShader } from "../ shaders/glow-shader";
 
 export class ObjectFactory implements IObjectFactory {
   private textureManager: ITextureManager;
+  private sunMaterial: THREE.ShaderMaterial | undefined;
 
   constructor(textureManager: ITextureManager) {
     this.textureManager = textureManager;
   }
 
+  createSunMaterial(spaceObject: SpaceObject) {
+    this.sunMaterial = new THREE.ShaderMaterial({
+      uniforms: SunShader.uniforms,
+      vertexShader: SunShader.vertexShader,
+      fragmentShader: SunShader.fragmentShader,
+      transparent: false,
+    });
+
+    this.sunMaterial.uniforms.uTexture.value =
+      this.textureManager.loadTexture("sun_color.jpg");
+
+    this.sunMaterial.uniforms.uNormalMap.value =
+      this.textureManager.loadTexture("sun_normal.jpg");
+
+    this.sunMaterial.uniforms.uEmissiveMap.value =
+      this.textureManager.loadTexture("sun_emissive.jpg");
+
+    const sunGeometry = new THREE.SphereGeometry(
+      this.calcRadiusPx(spaceObject.radius),
+      32,
+      32
+    );
+
+    const sunMesh = new THREE.Mesh(sunGeometry, this.sunMaterial);
+    sunMesh.name = spaceObject.name;
+    sunMesh.castShadow = false;
+    sunMesh.receiveShadow = false;
+
+    return sunMesh;
+  }
+
+  createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh) {
+    const glowRadius = this.calcRadiusPx(spaceObject.radius) * 5;
+    const glowGeometry = new THREE.PlaneGeometry(glowRadius, glowRadius);
+
+    const glowMaterial = new THREE.ShaderMaterial({
+      uniforms: GlowShader.uniforms,
+      vertexShader: GlowShader.vertexShader,
+      fragmentShader: GlowShader.fragmentShader,
+      transparent: true,
+      blending: THREE.NormalBlending,
+      depthTest: false,
+    });
+
+    const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+    glowMesh.position.copy(mesh.position);
+    glowMesh.castShadow = false;
+    glowMesh.receiveShadow = false;
+
+    return glowMesh;
+  }
+
   createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
-    const radiusPx =
-      spaceObject.radius *
-      SIMULATION_CONFIG.SCALE_DIST *
-      SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE;
-
-    const geometry = new THREE.SphereGeometry(radiusPx, 32, 32);
-    let material: THREE.Material;
-
-    if (spaceObject.texture) {
-      const texture = this.textureManager.loadTexture(spaceObject.texture);
-
-      material = new THREE.MeshPhongMaterial({
-        map: texture,
-        bumpMap: texture,
-        bumpScale: 0.05,
-        color: 0xffffff,
-        shininess: 30,
-        specular: new THREE.Color(0x333333),
-      });
-    } else {
-      material = new THREE.MeshPhongMaterial({
-        color: new THREE.Color(spaceObject.color),
-        shininess: 5,
-        specular: new THREE.Color(0x333333),
-      });
-    }
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = spaceObject.name;
-
-    return mesh;
+    return this.getSpaceObjectMesh(
+      new THREE.SphereGeometry(this.calcRadiusPx(spaceObject.radius), 32, 32),
+      this.getSpaceObjectMaterial(spaceObject),
+      spaceObject
+    );
   }
 
   createSpaceBackground(): THREE.Mesh {
-    const spaceGeometry = new THREE.SphereGeometry(500000, 30, 30);
+    const spaceGeometry = new THREE.SphereGeometry(500000, 100, 100);
     const spaceTexture = this.textureManager.loadTexture("spacehigh.jpg");
     spaceTexture.anisotropy = 10;
 
@@ -1032,11 +1302,57 @@ export class ObjectFactory implements IObjectFactory {
 
     return sprite;
   }
+
+  getSunMaterial() {
+    return this.sunMaterial;
+  }
+
+  private getSpaceObjectMaterial(spaceObject: SpaceObject) {
+    if (spaceObject.texture) {
+      const texture = this.textureManager.loadTexture(spaceObject.texture);
+
+      return new THREE.MeshPhongMaterial({
+        map: texture,
+        bumpMap: texture,
+        bumpScale: 0.05,
+        color: 0xffffff,
+        shininess: 30,
+        specular: new THREE.Color(0x333333),
+      });
+    }
+
+    return new THREE.MeshPhongMaterial({
+      color: new THREE.Color(spaceObject.color),
+      shininess: 5,
+      specular: new THREE.Color(0x333333),
+    });
+  }
+
+  private getSpaceObjectMesh(
+    geometry: THREE.SphereGeometry,
+    material: THREE.MeshPhongMaterial,
+    spaceObject: SpaceObject
+  ) {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = spaceObject.name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    return mesh;
+  }
+
+  private calcRadiusPx(radius: number) {
+    return (
+      radius *
+      SIMULATION_CONFIG.SCALE_DIST *
+      SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE
+    );
+  }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/renderer-core.ts ---
+--- Файл: src\rendering\renderer-core.ts ---
 import * as THREE from "three";
 import { PlatformAdapter } from "../adapters/platform-adapter";
 import { SpaceObject } from "../entities/space-object";
@@ -1044,6 +1360,7 @@ import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { ISceneManager } from "./interfaces";
 import { ICameraController } from "./interfaces";
 import { IObjectFactory } from "./interfaces";
+import { MiniMap } from "./mini-map";
 
 export class RendererCore {
   private renderer: THREE.WebGLRenderer;
@@ -1054,6 +1371,7 @@ export class RendererCore {
   private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
   private fpsElement: HTMLElement | null = null;
   private platformAdapter: PlatformAdapter;
+  private miniMap: MiniMap;
 
   constructor(
     platformAdapter: PlatformAdapter,
@@ -1070,6 +1388,14 @@ export class RendererCore {
       canvas: platformAdapter.getMainCanvas(),
       antialias: true,
     });
+
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
+    // Альтернативы:
+    // THREE.PCFShadowMap (чётче)
+    // THREE.BasicShadowMap (быстрее, грубее)
+
+    this.miniMap = new MiniMap(platformAdapter);
   }
 
   initialize(): void {
@@ -1086,6 +1412,8 @@ export class RendererCore {
       this.platformAdapter.getWidth(),
       this.platformAdapter.getHeight()
     );
+
+    this.platformAdapter.appendToDom(this.miniMap.getDOMElement());
   }
 
   setFpsElement(element: HTMLElement): void {
@@ -1094,12 +1422,24 @@ export class RendererCore {
 
   initSpaceObjects(spaceObjects: SpaceObject[]): void {
     const background = this.objectFactory.createSpaceBackground();
+
     this.sceneManager.getScene().add(background);
 
     spaceObjects.forEach((obj) => {
-      const mesh = this.objectFactory.createSpaceObject(obj);
-      this.spaceObjectMeshes.set(obj.name, mesh);
-      this.sceneManager.getScene().add(mesh);
+      if (obj.name === "Sun") {
+        const mesh = this.objectFactory.createSunMaterial(obj);
+        const glowMesh = this.objectFactory.createGlowMaterial(obj, mesh);
+
+        this.spaceObjectMeshes.set(obj.name, mesh);
+        this.spaceObjectMeshes.set("SunGlow", glowMesh);
+        this.sceneManager.getScene().add(mesh);
+        this.sceneManager.getScene().add(glowMesh);
+      } else {
+        const mesh = this.objectFactory.createSpaceObject(obj);
+
+        this.spaceObjectMeshes.set(obj.name, mesh);
+        this.sceneManager.getScene().add(mesh);
+      }
 
       const labelSprite = this.objectFactory.createLabelSprite(
         obj.name,
@@ -1111,6 +1451,12 @@ export class RendererCore {
         this.sceneManager.getScene().add(labelSprite);
       }
     });
+
+    const mesh = this.spaceObjectMeshes.get("Earth");
+
+    if (mesh) {
+      this.cameraController.smoothMoveTo(mesh.position, 2000);
+    }
   }
 
   updateSpaceObjects(spaceObjects: SpaceObject[]): void {
@@ -1141,9 +1487,23 @@ export class RendererCore {
         label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
       }
     });
+
+    const glowMesh = this.spaceObjectMeshes.get("SunGlow");
+
+    if (glowMesh) {
+      glowMesh.lookAt(this.cameraController.getCamera().position);
+    }
+
+    this.miniMap.update(spaceObjects);
   }
 
   render(deltaTime: number): void {
+    const sunMaterial = this.objectFactory.getSunMaterial();
+
+    if (sunMaterial) {
+      sunMaterial.uniforms.uTime.value += deltaTime * 0.001;
+    }
+
     this.cameraController.update();
 
     if (this.fpsElement) {
@@ -1155,6 +1515,8 @@ export class RendererCore {
       this.sceneManager.getScene(),
       this.cameraController.getCamera()
     );
+
+    this.miniMap.render();
   }
 
   dispose(): void {
@@ -1179,18 +1541,16 @@ export class RendererCore {
 
 --------------------------------------------------
 
---- Файл: src/rendering/scene-manager.ts ---
+--- Файл: src\rendering\scene-manager.ts ---
 import * as THREE from "three";
 import { ISceneManager } from "./interfaces";
 import { TextureManager } from "./texture-manager";
 
 export class SceneManager implements ISceneManager {
   private scene: THREE.Scene;
-  private textureLoader: TextureManager;
 
   constructor() {
     this.scene = new THREE.Scene();
-    this.textureLoader = new TextureManager();
     this.scene.background = new THREE.Color(0x000000);
 
     this.setupLighting();
@@ -1204,9 +1564,15 @@ export class SceneManager implements ISceneManager {
     const pointLight = new THREE.PointLight(0xffffff, 1.5);
 
     pointLight.position.set(0, 0, 0);
+    pointLight.shadow.mapSize.width = 2048;
+    pointLight.shadow.mapSize.height = 2048;
+    pointLight.shadow.camera.near = 1;
+    pointLight.shadow.camera.far = 500000;
+    pointLight.shadow.bias = 0.0001;
+    pointLight.shadow.radius = 1;
     this.scene.add(pointLight);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
 
     this.scene.add(ambientLight);
   }
@@ -1214,7 +1580,7 @@ export class SceneManager implements ISceneManager {
 
 --------------------------------------------------
 
---- Файл: src/rendering/texture-manager.ts ---
+--- Файл: src\rendering\texture-manager.ts ---
 import * as THREE from "three";
 import { ITextureManager } from "./interfaces";
 
@@ -1247,7 +1613,7 @@ export class TextureManager implements ITextureManager {
 
 --------------------------------------------------
 
---- Файл: src/simulation/solar-system.ts ---
+--- Файл: src\simulation\solar-system.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { SPACE_OBJECTS } from "../config/space-objects";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
@@ -1295,6 +1661,9 @@ export class SolarSystem {
 ============================================================
 CNHERNEHF ДИРЕКТОРИИ:
 ============================================================
+ shaders/
+  glow-shader.ts
+  sun-shader.ts
 adapters/
   browser-adapter.ts
   platform-adapter.ts
@@ -1313,6 +1682,7 @@ physics/
 rendering/
   camera-controller.ts
   interfaces.ts
+  mini-map.ts
   object-factory.ts
   renderer-core.ts
   scene-manager.ts
@@ -1342,22 +1712,25 @@ textures/
   plutohigh-min.jpg
   plutolow-min.jpg
   plutomedium-min.jpg
-  saturn_ringhigh.png
-  saturn_ringlow.png
-  saturn_ringmedium.png
   saturnhigh-min.jpg
   saturnlow-min.jpg
   saturnmedium-min.jpg
+  saturn_ringhigh.png
+  saturn_ringlow.png
+  saturn_ringmedium.png
   sol.png
   spacehigh.jpg
   spacelow.jpg
   spacemedium.jpg
-  uranus_ringhigh.png
-  uranus_ringlow.png
-  uranus_ringmedium.png
+  sun_color.jpg
+  sun_emissive.jpg
+  sun_normal.jpg
   uranushigh-min.jpg
   uranuslow-min.jpg
   uranusmedium-min.jpg
+  uranus_ringhigh.png
+  uranus_ringlow.png
+  uranus_ringmedium.png
   venushigh-min.jpg
   venuslow-min.jpg
   venusmedium-min.jpg

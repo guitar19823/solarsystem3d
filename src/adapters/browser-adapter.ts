@@ -1,29 +1,55 @@
-import { PlatformAdapter } from "./platform-adapter";
+import { CanvasName, Command, PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
   private resizeCallbacks: Set<() => void> = new Set();
-  private canvas: HTMLCanvasElement | undefined;
+  private canvasList = new Map<string, HTMLCanvasElement>();
+
+  private keyList = new Map<string, Command>([
+    ["KeyW", Command.forward],
+    ["KeyS", Command.back],
+    ["KeyA", Command.left],
+    ["KeyD", Command.right],
+    ["KeyQ", Command.up],
+    ["KeyE", Command.down],
+    ["KeyM", Command.zoomMap],
+  ]);
 
   constructor() {
-    this.canvas = document.createElement("canvas");
-
-    document.body.appendChild(this.canvas);
+    this.createCanvas(CanvasName.MAIN_SCENE);
+  }
+  onMoveStart(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    throw new Error("Method not implemented.");
+  }
+  onMoveEnd(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    throw new Error("Method not implemented.");
   }
 
-  getMainCanvas(): HTMLCanvasElement | undefined {
-    return this.canvas;
+  getCanvas(canvasName: CanvasName) {
+    const canvas = this.canvasList.get(canvasName);
+
+    if (canvas) {
+      return canvas;
+    }
+
+    return this.createCanvas(CanvasName.MAIN_SCENE);
   }
 
-  getCanvas(): HTMLCanvasElement | undefined {
+  getCanvasWithoutAddToDom() {
     return document.createElement("canvas");
   }
 
   getWidth(): number {
-    return Math.max(window.innerWidth, 400); // мин. ширина 400px
+    return Math.max(window.innerWidth, 400);
   }
 
   getHeight(): number {
-    return Math.max(window.innerHeight, 300); // мин. высота 300px
+    return Math.max(window.innerHeight, 300);
   }
 
   getPixelRatio(): number {
@@ -40,13 +66,9 @@ export class BrowserAdapter implements PlatformAdapter {
     window.removeEventListener("resize", callback);
   }
 
-  appendToDom(element: HTMLElement): void {
-    document.body.appendChild(element);
-  }
-
-  appendCanvasToDom(): void {
-    if (this.canvas) {
-      document.body.appendChild(this.canvas);
+  appendToDom(element: HTMLElement | undefined): void {
+    if (element) {
+      document.body.appendChild(element);
     }
   }
 
@@ -54,55 +76,69 @@ export class BrowserAdapter implements PlatformAdapter {
     window.requestAnimationFrame(callback);
   }
 
-  onZoom(callback: (value: number) => void): void {
-    window.addEventListener("wheel", (e) => {
+  onPressButton(callback: (value: string) => void): void {
+    window.addEventListener("keydown", (e) => {
+      const command = this.keyList.get(e.code);
+      console.log(command);
+      if (command) callback(command);
+    });
+  }
+
+  onReleaseButton(callback: (value: string) => void): void {
+    window.addEventListener("keyup", (e) => {
+      const command = this.keyList.get(e.code);
+      if (command) callback(command);
+    });
+  }
+
+  onZoom(callback: (value: number) => void, canvasName: CanvasName): void {
+    this.canvasList.get(canvasName)?.addEventListener("wheel", (e) => {
       callback(e.deltaY);
     });
   }
 
-  onPress(callback: (value: string) => void): void {
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyW") callback("forward");
-      if (e.code === "KeyS") callback("back");
-      if (e.code === "KeyA") callback("left");
-      if (e.code === "KeyD") callback("right");
-      if (e.code === "KeyQ") callback("up");
-      if (e.code === "KeyE") callback("down");
-    });
-  }
-
-  onRelease(callback: (value: string) => void): void {
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "KeyW") callback("forward");
-      if (e.code === "KeyS") callback("back");
-      if (e.code === "KeyA") callback("left");
-      if (e.code === "KeyD") callback("right");
-      if (e.code === "KeyQ") callback("up");
-      if (e.code === "KeyE") callback("down");
-    });
-  }
-
-  onMove(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mousemove", (e) => {
+  onMove(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mousemove", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onMoveStart(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mousedown", (e) => {
+  onPress(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mousedown", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onMoveEnd(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mouseup", (e) => {
+  onRelease(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mouseup", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onLeave(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mouseleave", (e) => {
+  onLeave(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mouseleave", (e) => {
       callback(e.clientX, e.clientY);
     });
+  }
+
+  private createCanvas(canvasName: CanvasName) {
+    const canvas = document.createElement("canvas");
+
+    this.canvasList.set(canvasName, canvas);
+    document.body.appendChild(canvas);
+
+    return canvas;
   }
 }

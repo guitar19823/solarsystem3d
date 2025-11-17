@@ -1,6 +1,10 @@
 import * as THREE from "three";
 import { ICameraController } from "./interfaces";
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import {
+  CanvasName,
+  Command,
+  PlatformAdapter,
+} from "../adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 
 export class CameraController implements ICameraController {
@@ -33,126 +37,32 @@ export class CameraController implements ICameraController {
     this.updateCamera();
   }
 
-  private setupEvents(platformAdapter: PlatformAdapter): void {
-    platformAdapter.onMoveStart((x, y) => {
-      this.isMouseDown = true;
-      this.mousePrev.set(x, y);
-    });
-
-    platformAdapter.onMoveEnd(() => {
-      this.isMouseDown = false;
-    });
-
-    platformAdapter.onLeave(() => {
-      this.isMouseDown = false;
-    });
-
-    platformAdapter.onMove((x, y) => {
-      if (this.isMouseDown) {
-        this.mouseCurr.set(x, y);
-        this.handleMouseRotate();
-        this.mousePrev.copy(this.mouseCurr);
-      }
-    });
-
-    platformAdapter.onZoom((value) => {
-      const zoomSpeed = 10;
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(this.camera.quaternion);
-      this.target.addScaledVector(direction, value * 0.01 * zoomSpeed);
-      this.updateCamera();
-    });
-
-    platformAdapter.onPress((value) => {
-      this.commands.add(value);
-    });
-
-    platformAdapter.onRelease((value) => {
-      this.commands.delete(value);
-    });
-  }
-
   update(): void {
     this.applyDamping();
     this.updateCameraPosition();
     this.updateCamera();
   }
 
-  private applyDamping(): void {
-    this.velocity.multiplyScalar(1 - this.damping);
-  }
+  smoothMoveTo(position: THREE.Vector3, duration: number = 1000) {
+    const startPosition = this.camera.position.clone();
+    const targetPosition = position;
+    const startTime = performance.now();
 
-  private handleMouseRotate(): void {
-    const delta = new THREE.Vector2()
-      .subVectors(this.mouseCurr, this.mousePrev)
-      .multiplyScalar(0.002);
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const t = Math.min(elapsed / duration, 1);
 
-    this.velocity.set(-delta.x, delta.y);
-  }
+      this.camera.position.lerpVectors(startPosition, targetPosition, t);
+      this.target.lerpVectors(startPosition, targetPosition, t);
 
-  private updateCameraPosition(): void {
-    if (!this.commands.size) return;
+      this.updateCamera();
 
-    const move = new THREE.Vector3();
+      if (t < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
 
-    const cameraDirection = new THREE.Vector3(0, 0, -1);
-    cameraDirection.applyQuaternion(this.camera.quaternion);
-
-    const right = new THREE.Vector3(1, 0, 0);
-    right.applyQuaternion(this.camera.quaternion);
-
-    const up = new THREE.Vector3(0, 1, 0);
-
-    let dx = 0,
-      dy = 0,
-      dz = 0;
-
-    if (this.commands.has("forward")) dz += 1;
-    if (this.commands.has("back")) dz -= 1;
-    if (this.commands.has("left")) dx -= 1;
-    if (this.commands.has("right")) dx += 1;
-    if (this.commands.has("up")) dy += 1;
-    if (this.commands.has("down")) dy -= 1;
-
-    if (dx !== 0 || dy !== 0 || dz !== 0) {
-      move
-        .addScaledVector(right, dx)
-        .addScaledVector(up, dy)
-        .addScaledVector(cameraDirection, dz);
-
-      move.multiplyScalar(this.moveSpeed * SIMULATION_CONFIG.SPEED_FACTOR);
-
-      this.camera.position.add(move);
-      this.target.add(move);
-    }
-  }
-
-  private updateCamera(): void {
-    this.yaw += this.velocity.x;
-    this.pitch += this.velocity.y;
-
-    this.pitch = Math.max(
-      -Math.PI / 2 + 0.01,
-      Math.min(Math.PI / 2 - 0.01, this.pitch)
-    );
-
-    this.velocity.set(0, 0);
-
-    const rotationMatrix = new THREE.Matrix4();
-    const pitchMatrix = new THREE.Matrix4();
-
-    rotationMatrix.makeRotationY(this.yaw);
-    pitchMatrix.makeRotationX(this.pitch);
-    rotationMatrix.multiply(pitchMatrix);
-
-    this.camera.quaternion.setFromRotationMatrix(rotationMatrix);
-    this.camera.position.copy(this.target);
-
-    this.camera.lookAt(
-      this.target
-        .clone()
-        .add(new THREE.Vector3(0, 0, -1).applyMatrix4(rotationMatrix))
-    );
+    requestAnimationFrame(animate);
   }
 
   resize(width: number, height: number): void {
@@ -194,5 +104,121 @@ export class CameraController implements ICameraController {
     this.camera.getWorldDirection(direction);
 
     return direction;
+  }
+
+  private setupEvents(platformAdapter: PlatformAdapter): void {
+    platformAdapter.onPress((x, y) => {
+      this.isMouseDown = true;
+      this.mousePrev.set(x, y);
+    }, CanvasName.MAIN_SCENE);
+
+    platformAdapter.onRelease(() => {
+      this.isMouseDown = false;
+    }, CanvasName.MAIN_SCENE);
+
+    platformAdapter.onLeave(() => {
+      this.isMouseDown = false;
+    }, CanvasName.MAIN_SCENE);
+
+    platformAdapter.onMove((x, y) => {
+      if (this.isMouseDown) {
+        this.mouseCurr.set(x, y);
+        this.handleMouseRotate();
+        this.mousePrev.copy(this.mouseCurr);
+      }
+    }, CanvasName.MAIN_SCENE);
+
+    platformAdapter.onZoom((value) => {
+      const zoomSpeed = 10;
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(this.camera.quaternion);
+      this.target.addScaledVector(direction, value * 0.01 * zoomSpeed);
+      this.updateCamera();
+    }, CanvasName.MAIN_SCENE);
+
+    platformAdapter.onPressButton((value) => {
+      this.commands.add(value);
+    });
+
+    platformAdapter.onReleaseButton((value) => {
+      this.commands.delete(value);
+    });
+  }
+
+  private applyDamping(): void {
+    this.velocity.multiplyScalar(1 - this.damping);
+  }
+
+  private handleMouseRotate(): void {
+    const delta = new THREE.Vector2()
+      .subVectors(this.mouseCurr, this.mousePrev)
+      .multiplyScalar(0.002);
+
+    this.velocity.set(-delta.x, delta.y);
+  }
+
+  private updateCameraPosition(): void {
+    if (!this.commands.size) return;
+
+    const move = new THREE.Vector3();
+
+    const cameraDirection = new THREE.Vector3(0, 0, -1);
+    cameraDirection.applyQuaternion(this.camera.quaternion);
+
+    const right = new THREE.Vector3(1, 0, 0);
+    right.applyQuaternion(this.camera.quaternion);
+
+    const up = new THREE.Vector3(0, 1, 0);
+
+    let dx = 0,
+      dy = 0,
+      dz = 0;
+
+    if (this.commands.has(Command.forward)) dz += 1;
+    if (this.commands.has(Command.back)) dz -= 1;
+    if (this.commands.has(Command.left)) dx -= 1;
+    if (this.commands.has(Command.right)) dx += 1;
+    if (this.commands.has(Command.up)) dy += 1;
+    if (this.commands.has(Command.down)) dy -= 1;
+
+    if (dx !== 0 || dy !== 0 || dz !== 0) {
+      move
+        .addScaledVector(right, dx)
+        .addScaledVector(up, dy)
+        .addScaledVector(cameraDirection, dz);
+
+      move.multiplyScalar(this.moveSpeed * SIMULATION_CONFIG.SPEED_FACTOR);
+
+      this.camera.position.add(move);
+      this.target.add(move);
+    }
+  }
+
+  private updateCamera(): void {
+    this.yaw += this.velocity.x;
+    this.pitch += this.velocity.y;
+
+    this.pitch = Math.max(
+      -Math.PI / 2 + 0.01,
+      Math.min(Math.PI / 2 - 0.01, this.pitch)
+    );
+
+    this.velocity.set(0, 0);
+
+    const rotationMatrix = new THREE.Matrix4();
+    const pitchMatrix = new THREE.Matrix4();
+
+    rotationMatrix.makeRotationY(this.yaw);
+    pitchMatrix.makeRotationX(this.pitch);
+    rotationMatrix.multiply(pitchMatrix);
+
+    this.camera.quaternion.setFromRotationMatrix(rotationMatrix);
+    this.camera.position.copy(this.target);
+
+    this.camera.lookAt(
+      this.target
+        .clone()
+        .add(new THREE.Vector3(0, 0, -1).applyMatrix4(rotationMatrix))
+    );
   }
 }

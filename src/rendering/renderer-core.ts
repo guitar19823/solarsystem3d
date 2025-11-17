@@ -1,10 +1,11 @@
 import * as THREE from "three";
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import { CanvasName, PlatformAdapter } from "../adapters/platform-adapter";
 import { SpaceObject } from "../entities/space-object";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { ISceneManager } from "./interfaces";
 import { ICameraController } from "./interfaces";
 import { IObjectFactory } from "./interfaces";
+import { MiniMap } from "./mini-map";
 
 export class RendererCore {
   private renderer: THREE.WebGLRenderer;
@@ -15,6 +16,7 @@ export class RendererCore {
   private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
   private fpsElement: HTMLElement | null = null;
   private platformAdapter: PlatformAdapter;
+  private miniMap: MiniMap;
 
   constructor(
     platformAdapter: PlatformAdapter,
@@ -28,9 +30,17 @@ export class RendererCore {
     this.objectFactory = objectFactory;
 
     this.renderer = new THREE.WebGLRenderer({
-      canvas: platformAdapter.getMainCanvas(),
+      canvas: platformAdapter.getCanvas(CanvasName.MAIN_SCENE),
       antialias: true,
     });
+
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Мягкие тени
+    // Альтернативы:
+    // THREE.PCFShadowMap (чётче)
+    // THREE.BasicShadowMap (быстрее, грубее)
+
+    this.miniMap = new MiniMap(platformAdapter);
   }
 
   initialize(): void {
@@ -47,6 +57,8 @@ export class RendererCore {
       this.platformAdapter.getWidth(),
       this.platformAdapter.getHeight()
     );
+
+    this.platformAdapter.appendToDom(this.miniMap.getDOMElement());
   }
 
   setFpsElement(element: HTMLElement): void {
@@ -55,6 +67,7 @@ export class RendererCore {
 
   initSpaceObjects(spaceObjects: SpaceObject[]): void {
     const background = this.objectFactory.createSpaceBackground();
+
     this.sceneManager.getScene().add(background);
 
     spaceObjects.forEach((obj) => {
@@ -83,6 +96,12 @@ export class RendererCore {
         this.sceneManager.getScene().add(labelSprite);
       }
     });
+
+    const mesh = this.spaceObjectMeshes.get("Earth");
+
+    if (mesh) {
+      this.cameraController.smoothMoveTo(mesh.position, 2000);
+    }
   }
 
   updateSpaceObjects(spaceObjects: SpaceObject[]): void {
@@ -119,6 +138,8 @@ export class RendererCore {
     if (glowMesh) {
       glowMesh.lookAt(this.cameraController.getCamera().position);
     }
+
+    this.miniMap.update(spaceObjects);
   }
 
   render(deltaTime: number): void {
@@ -139,6 +160,8 @@ export class RendererCore {
       this.sceneManager.getScene(),
       this.cameraController.getCamera()
     );
+
+    this.miniMap.render();
   }
 
   dispose(): void {
