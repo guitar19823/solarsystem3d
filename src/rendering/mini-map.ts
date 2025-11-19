@@ -38,11 +38,10 @@ export class MiniMap {
     this.centerY = this.height / 2;
 
     this.container.style.position = "absolute";
-    this.container.style.bottom = "20px";
+    this.container.style.top = "20px";
     this.container.style.left = "20px";
     this.container.style.borderRadius = "8px";
     this.container.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    this.container.style.pointerEvents = "none";
 
     this.setupEvents(platformAdapter);
   }

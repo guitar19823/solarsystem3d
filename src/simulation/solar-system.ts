@@ -1,6 +1,7 @@
 import { SpaceObject } from "../entities/space-object";
 import { SPACE_OBJECTS } from "../config/space-objects";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
+import { Vector3D } from "../physics/vector";
 
 export class SolarSystem {
   private spaceObjects: SpaceObject[] = [];
@@ -36,6 +37,14 @@ export class SolarSystem {
 
     for (const spaceObject of this.spaceObjects) {
       spaceObject.update(dt, spaceObjectsCopy);
+    }
+  }
+
+  public applyCameraVelocityImpulse(dx: number, dy: number, dz: number): void {
+    const camera = this.spaceObjects.find((obj) => obj.name === "Camera");
+
+    if (camera) {
+      camera.vel = camera.vel.add(new Vector3D(dx, dy, dz));
     }
   }
 }

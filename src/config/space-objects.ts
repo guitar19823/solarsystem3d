@@ -12,6 +12,14 @@ export interface ISpaceObjectConfig {
 
 export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
   {
+    name: "Camera",
+    mass: 1000,
+    pos: new Vector3D(1.4961e11, 0, 0),
+    vel: new Vector3D(0, 0, -29783),
+    color: "cyan",
+    radius: 1,
+  },
+  {
     name: "Sun",
     mass: 1.989e30,
     pos: new Vector3D(0, 0, 0),

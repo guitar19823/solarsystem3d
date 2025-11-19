@@ -7,7 +7,6 @@ import {
 } from "../adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { Vector3D } from "../physics/vector";
-import { SolarSystem } from "../simulation/solar-system";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
@@ -27,10 +26,7 @@ export class CameraController implements ICameraController {
   private mousePrev: THREE.Vector2 = new THREE.Vector2();
   private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
-  constructor(
-    platformAdapter: PlatformAdapter,
-    private solarSystem: SolarSystem
-  ) {
+  constructor(platformAdapter: PlatformAdapter) {
     this.camera = new THREE.PerspectiveCamera(
       65,
       platformAdapter.getWidth() / platformAdapter.getHeight(),
@@ -148,51 +144,8 @@ export class CameraController implements ICameraController {
       this.updateCamera();
     }, CanvasName.MAIN_SCENE);
 
-    // platformAdapter.onPressButton((value) => {
-    //   this.commands.add(value);
-    // });
-
-    // platformAdapter.onReleaseButton((value) => {
-    //   this.commands.delete(value);
-    // });
-
     platformAdapter.onPressButton((value) => {
       this.commands.add(value);
-
-      if (["forward", "back", "left", "right", "up", "down"].includes(value)) {
-        const { forward, right, up } = this.getCameraAxes();
-
-        let impulse = new THREE.Vector3(0, 0, 0);
-        const impulseStrength = 10000; // Подберите под масштаб симуляции
-
-        switch (value) {
-          case "forward":
-            impulse.copy(forward).multiplyScalar(impulseStrength);
-            break;
-          case "back":
-            impulse.copy(forward).multiplyScalar(-impulseStrength);
-            break;
-          case "left":
-            impulse.copy(right).multiplyScalar(-impulseStrength);
-            break;
-          case "right":
-            impulse.copy(right).multiplyScalar(impulseStrength);
-            break;
-          case "up":
-            impulse.copy(up).multiplyScalar(impulseStrength);
-            break;
-          case "down":
-            impulse.copy(up).multiplyScalar(-impulseStrength);
-            break;
-        }
-
-        // Передаём импульс в систему симуляции
-        this.solarSystem.applyCameraVelocityImpulse(
-          impulse.x,
-          impulse.y,
-          impulse.z
-        );
-      }
     });
 
     platformAdapter.onReleaseButton((value) => {
@@ -275,22 +228,5 @@ export class CameraController implements ICameraController {
         .clone()
         .add(new THREE.Vector3(0, 0, -1).applyMatrix4(rotationMatrix))
     );
-  }
-
-  private getCameraAxes(): {
-    forward: THREE.Vector3;
-    right: THREE.Vector3;
-    up: THREE.Vector3;
-  } {
-    const forward = new THREE.Vector3(0, 0, -1); // вперёд (в системе камеры)
-    const right = new THREE.Vector3(1, 0, 0); // вправо (в системе камеры)
-    const up = new THREE.Vector3(0, 1, 0); // вверх (в системе камеры)
-
-    // Преобразуем в глобальную систему координат через кватернион камеры
-    forward.applyQuaternion(this.camera.quaternion);
-    right.applyQuaternion(this.camera.quaternion);
-    up.applyQuaternion(this.camera.quaternion);
-
-    return { forward, right, up };
   }
 }

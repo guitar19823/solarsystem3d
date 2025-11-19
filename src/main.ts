@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { PlatformAdapter } from "./adapters/platform-adapter";
 import { BrowserAdapter } from "./adapters/browser-adapter";
 import { SolarSystem } from "./simulation/solar-system";
@@ -12,10 +11,11 @@ import { ObjectFactory } from "./rendering/object-factory";
 import { RendererCore } from "./rendering/renderer-core";
 
 export function runSimulation(platformAdapter: PlatformAdapter) {
+  const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
   const sceneManager = new SceneManager();
   const textureManager = new TextureManager();
   const objectFactory = new ObjectFactory(textureManager);
-  const cameraController = new CameraController(platformAdapter);
+  const cameraController = new CameraController(platformAdapter, system);
 
   const renderer = new RendererCore(
     platformAdapter,
@@ -33,8 +33,6 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
   fpsElement.style.color = "lime";
   document.body.appendChild(fpsElement);
   renderer.setFpsElement(fpsElement);
-
-  const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
 
   renderer.initSpaceObjects(system.getSpaceObjects());
 

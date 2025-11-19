@@ -71,7 +71,9 @@ export class RendererCore {
     this.sceneManager.getScene().add(background);
 
     spaceObjects.forEach((obj) => {
-      if (obj.name === "Sun") {
+      if (obj.name === "Camera") {
+        return;
+      } else if (obj.name === "Sun") {
         const mesh = this.objectFactory.createSunMaterial(obj);
         const glowMesh = this.objectFactory.createGlowMaterial(obj, mesh);
 
@@ -100,7 +102,7 @@ export class RendererCore {
     const mesh = this.spaceObjectMeshes.get("Earth");
 
     if (mesh) {
-      this.cameraController.smoothMoveTo(mesh.position, 2000);
+      // this.cameraController.smoothMoveTo(mesh.position, 2000);
     }
   }
 
@@ -108,6 +110,18 @@ export class RendererCore {
     const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
 
     spaceObjects.forEach((obj) => {
+      if (obj.name === "Camera") {
+        this.cameraController.setPosition(
+          new THREE.Vector3(
+            obj.pos.x * scaleDist,
+            obj.pos.y * scaleDist,
+            obj.pos.z * scaleDist
+          )
+        );
+
+        return;
+      }
+
       const mesh = this.spaceObjectMeshes.get(obj.name);
       const label = this.spaceObjectLabels.get(obj.name);
 
@@ -149,7 +163,7 @@ export class RendererCore {
       sunMaterial.uniforms.uTime.value += deltaTime * 0.001;
     }
 
-    this.cameraController.update();
+    // this.cameraController.update();
 
     if (this.fpsElement) {
       const fps = 1000 / deltaTime;

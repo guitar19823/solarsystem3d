@@ -17,18 +17,6 @@ export class BrowserAdapter implements PlatformAdapter {
   constructor() {
     this.createCanvas(CanvasName.MAIN_SCENE);
   }
-  onMoveStart(
-    callback: (x: number, y: number) => void,
-    canvasName: CanvasName
-  ): void {
-    throw new Error("Method not implemented.");
-  }
-  onMoveEnd(
-    callback: (x: number, y: number) => void,
-    canvasName: CanvasName
-  ): void {
-    throw new Error("Method not implemented.");
-  }
 
   getCanvas(canvasName: CanvasName) {
     const canvas = this.canvasList.get(canvasName);
@@ -37,7 +25,7 @@ export class BrowserAdapter implements PlatformAdapter {
       return canvas;
     }
 
-    return this.createCanvas(CanvasName.MAIN_SCENE);
+    return this.createCanvas(canvasName);
   }
 
   getCanvasWithoutAddToDom() {
@@ -79,7 +67,6 @@ export class BrowserAdapter implements PlatformAdapter {
   onPressButton(callback: (value: string) => void): void {
     window.addEventListener("keydown", (e) => {
       const command = this.keyList.get(e.code);
-      console.log(command);
       if (command) callback(command);
     });
   }

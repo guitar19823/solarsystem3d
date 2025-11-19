@@ -1,5 +1,5 @@
 
---- Файл: src\ shaders\glow-shader.ts ---
+--- Файл: src/ shaders/glow-shader.ts ---
 export const GlowShader = {
   uniforms: {
     color: { value: [1.0, 1.0, 1.0] },
@@ -35,7 +35,7 @@ export const GlowShader = {
 
 --------------------------------------------------
 
---- Файл: src\ shaders\sun-shader.ts ---
+--- Файл: src/ shaders/sun-shader.ts ---
 export const SunShader = {
   uniforms: {
     uTime: { value: 0 },
@@ -148,33 +148,47 @@ export const SunShader = {
 
 --------------------------------------------------
 
---- Файл: src\adapters\browser-adapter.ts ---
-import { PlatformAdapter } from "./platform-adapter";
+--- Файл: src/adapters/browser-adapter.ts ---
+import { CanvasName, Command, PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
   private resizeCallbacks: Set<() => void> = new Set();
-  private canvas: HTMLCanvasElement | undefined;
+  private canvasList = new Map<string, HTMLCanvasElement>();
+
+  private keyList = new Map<string, Command>([
+    ["KeyW", Command.forward],
+    ["KeyS", Command.back],
+    ["KeyA", Command.left],
+    ["KeyD", Command.right],
+    ["KeyQ", Command.up],
+    ["KeyE", Command.down],
+    ["KeyM", Command.zoomMap],
+  ]);
 
   constructor() {
-    this.canvas = document.createElement("canvas");
-
-    document.body.appendChild(this.canvas);
+    this.createCanvas(CanvasName.MAIN_SCENE);
   }
 
-  getMainCanvas(): HTMLCanvasElement | undefined {
-    return this.canvas;
+  getCanvas(canvasName: CanvasName) {
+    const canvas = this.canvasList.get(canvasName);
+
+    if (canvas) {
+      return canvas;
+    }
+
+    return this.createCanvas(canvasName);
   }
 
-  getCanvas(): HTMLCanvasElement | undefined {
+  getCanvasWithoutAddToDom() {
     return document.createElement("canvas");
   }
 
   getWidth(): number {
-    return Math.max(window.innerWidth, 400); // мин. ширина 400px
+    return Math.max(window.innerWidth, 400);
   }
 
   getHeight(): number {
-    return Math.max(window.innerHeight, 300); // мин. высота 300px
+    return Math.max(window.innerHeight, 300);
   }
 
   getPixelRatio(): number {
@@ -191,13 +205,9 @@ export class BrowserAdapter implements PlatformAdapter {
     window.removeEventListener("resize", callback);
   }
 
-  appendToDom(element: HTMLElement): void {
-    document.body.appendChild(element);
-  }
-
-  appendCanvasToDom(): void {
-    if (this.canvas) {
-      document.body.appendChild(this.canvas);
+  appendToDom(element: HTMLElement | undefined): void {
+    if (element) {
+      document.body.appendChild(element);
     }
   }
 
@@ -205,85 +215,128 @@ export class BrowserAdapter implements PlatformAdapter {
     window.requestAnimationFrame(callback);
   }
 
-  onZoom(callback: (value: number) => void): void {
-    window.addEventListener("wheel", (e) => {
+  onPressButton(callback: (value: string) => void): void {
+    window.addEventListener("keydown", (e) => {
+      const command = this.keyList.get(e.code);
+      if (command) callback(command);
+    });
+  }
+
+  onReleaseButton(callback: (value: string) => void): void {
+    window.addEventListener("keyup", (e) => {
+      const command = this.keyList.get(e.code);
+      if (command) callback(command);
+    });
+  }
+
+  onZoom(callback: (value: number) => void, canvasName: CanvasName): void {
+    this.canvasList.get(canvasName)?.addEventListener("wheel", (e) => {
       callback(e.deltaY);
     });
   }
 
-  onPress(callback: (value: string) => void): void {
-    window.addEventListener("keydown", (e) => {
-      if (e.code === "KeyW") callback("forward");
-      if (e.code === "KeyS") callback("back");
-      if (e.code === "KeyA") callback("left");
-      if (e.code === "KeyD") callback("right");
-      if (e.code === "KeyQ") callback("up");
-      if (e.code === "KeyE") callback("down");
-    });
-  }
-
-  onRelease(callback: (value: string) => void): void {
-    window.addEventListener("keyup", (e) => {
-      if (e.code === "KeyW") callback("forward");
-      if (e.code === "KeyS") callback("back");
-      if (e.code === "KeyA") callback("left");
-      if (e.code === "KeyD") callback("right");
-      if (e.code === "KeyQ") callback("up");
-      if (e.code === "KeyE") callback("down");
-    });
-  }
-
-  onMove(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mousemove", (e) => {
+  onMove(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mousemove", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onMoveStart(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mousedown", (e) => {
+  onPress(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mousedown", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onMoveEnd(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mouseup", (e) => {
+  onRelease(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mouseup", (e) => {
       callback(e.clientX, e.clientY);
     });
   }
 
-  onLeave(callback: (x: number, y: number) => void): void {
-    this.canvas?.addEventListener("mouseleave", (e) => {
+  onLeave(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void {
+    this.canvasList.get(canvasName)?.addEventListener("mouseleave", (e) => {
       callback(e.clientX, e.clientY);
     });
+  }
+
+  private createCanvas(canvasName: CanvasName) {
+    const canvas = document.createElement("canvas");
+
+    this.canvasList.set(canvasName, canvas);
+    document.body.appendChild(canvas);
+
+    return canvas;
   }
 }
 
 --------------------------------------------------
 
---- Файл: src\adapters\platform-adapter.ts ---
+--- Файл: src/adapters/platform-adapter.ts ---
+export const enum CanvasName {
+  MAIN_SCENE = "MAIN_SCENE",
+  MINI_MAP = "MINI_MAP",
+}
+
+export const enum Command {
+  forward = "forward",
+  back = "back",
+  left = "left",
+  right = "right",
+  up = "up",
+  down = "down",
+  zoomMap = "zoomMap",
+}
 export interface PlatformAdapter {
-  getMainCanvas(): HTMLCanvasElement | undefined;
-  getCanvas(): HTMLCanvasElement | undefined;
+  getCanvas(canvasName: CanvasName): HTMLCanvasElement;
+  getCanvasWithoutAddToDom(): HTMLCanvasElement;
   getWidth(): number;
   getHeight(): number;
   getPixelRatio(): number;
   onResize(callback: () => void): void;
   offResize(callback: () => void): void;
-  appendToDom(element: HTMLElement): void;
-  appendCanvasToDom(): void;
+  appendToDom(element: HTMLElement | undefined): void;
   requestAnimationFrame(callback: FrameRequestCallback): void;
-  onZoom(callback: (value: number) => void): void;
-  onPress(callback: (value: string) => void): void;
-  onRelease(callback: (value: string) => void): void;
-  onMove(callback: (x: number, y: number) => void): void;
-  onMoveStart(callback: (x: number, y: number) => void): void;
-  onMoveEnd(callback: (x: number, y: number) => void): void;
-  onLeave(callback: (x: number, y: number) => void): void;
+
+  onPressButton(callback: (value: string) => void): void;
+  onReleaseButton(callback: (value: string) => void): void;
+  onZoom(callback: (value: number) => void, canvasName: CanvasName): void;
+
+  onMove(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void;
+
+  onPress(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void;
+
+  onRelease(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void;
+
+  onLeave(
+    callback: (x: number, y: number) => void,
+    canvasName: CanvasName
+  ): void;
 }
 
 --------------------------------------------------
 
---- Файл: src\config\config-api.ts ---
+--- Файл: src/config/config-api.ts ---
 import { Vector3D } from "../physics/vector";
 import { SPACE_OBJECTS, ISpaceObjectConfig } from "./space-objects";
 import { SIMULATION_CONFIG } from "./simulation-config";
@@ -421,7 +474,7 @@ export class ConfigAPI {
 
 --------------------------------------------------
 
---- Файл: src\config\simulation-config.ts ---
+--- Файл: src/config/simulation-config.ts ---
 export const SIMULATION_CONFIG = {
   SIMULATION_DT: 1, // шаг симуляции (x реального времени)
   DEFAULT_DT: 86400,
@@ -442,7 +495,7 @@ export const SIMULATION_CONFIG = {
 
 --------------------------------------------------
 
---- Файл: src\config\space-objects.ts ---
+--- Файл: src/config/space-objects.ts ---
 import { Vector3D } from "../physics/vector";
 
 export interface ISpaceObjectConfig {
@@ -456,6 +509,14 @@ export interface ISpaceObjectConfig {
 }
 
 export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
+  {
+    name: "Camera",
+    mass: 1000,
+    pos: new Vector3D(0, 0, 0),
+    vel: new Vector3D(0, 0, 0),
+    color: "cyan",
+    radius: 1,
+  },
   {
     name: "Sun",
     mass: 1.989e30,
@@ -540,7 +601,7 @@ export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
 
 --------------------------------------------------
 
---- Файл: src\entities\celestial-body.ts ---
+--- Файл: src/entities/celestial-body.ts ---
 import { Vector3D } from "../physics/vector";
 import { ISpaceObject } from "./interface";
 
@@ -560,7 +621,7 @@ export abstract class CelestialBody implements ISpaceObject {
 
 --------------------------------------------------
 
---- Файл: src\entities\interface.ts ---
+--- Файл: src/entities/interface.ts ---
 import { Vector3D } from "../physics/vector";
 
 export interface ISpaceObject {
@@ -575,7 +636,7 @@ export interface ISpaceObject {
 
 --------------------------------------------------
 
---- Файл: src\entities\space-object.ts ---
+--- Файл: src/entities/space-object.ts ---
 import { CelestialBody } from "./celestial-body";
 import { GravityCalculator } from "../physics/gravity";
 
@@ -601,7 +662,7 @@ export class SpaceObject extends CelestialBody {
 
 --------------------------------------------------
 
---- Файл: src\main.ts ---
+--- Файл: src/main.ts ---
 import * as THREE from "three";
 import { PlatformAdapter } from "./adapters/platform-adapter";
 import { BrowserAdapter } from "./adapters/browser-adapter";
@@ -728,7 +789,7 @@ initControls();
 
 --------------------------------------------------
 
---- Файл: src\physics\gravity.ts ---
+--- Файл: src/physics/gravity.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "./vector";
 
@@ -772,7 +833,7 @@ export class GravityCalculator {
 
 --------------------------------------------------
 
---- Файл: src\physics\vector.ts ---
+--- Файл: src/physics/vector.ts ---
 export interface Vector {
   x: number;
   y: number;
@@ -801,10 +862,14 @@ export class Vector3D implements Vector {
 
 --------------------------------------------------
 
---- Файл: src\rendering\camera-controller.ts ---
+--- Файл: src/rendering/camera-controller.ts ---
 import * as THREE from "three";
 import { ICameraController } from "./interfaces";
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import {
+  CanvasName,
+  Command,
+  PlatformAdapter,
+} from "../adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 
 export class CameraController implements ICameraController {
@@ -907,18 +972,18 @@ export class CameraController implements ICameraController {
   }
 
   private setupEvents(platformAdapter: PlatformAdapter): void {
-    platformAdapter.onMoveStart((x, y) => {
+    platformAdapter.onPress((x, y) => {
       this.isMouseDown = true;
       this.mousePrev.set(x, y);
-    });
+    }, CanvasName.MAIN_SCENE);
 
-    platformAdapter.onMoveEnd(() => {
+    platformAdapter.onRelease(() => {
       this.isMouseDown = false;
-    });
+    }, CanvasName.MAIN_SCENE);
 
     platformAdapter.onLeave(() => {
       this.isMouseDown = false;
-    });
+    }, CanvasName.MAIN_SCENE);
 
     platformAdapter.onMove((x, y) => {
       if (this.isMouseDown) {
@@ -926,7 +991,7 @@ export class CameraController implements ICameraController {
         this.handleMouseRotate();
         this.mousePrev.copy(this.mouseCurr);
       }
-    });
+    }, CanvasName.MAIN_SCENE);
 
     platformAdapter.onZoom((value) => {
       const zoomSpeed = 10;
@@ -934,13 +999,13 @@ export class CameraController implements ICameraController {
       direction.applyQuaternion(this.camera.quaternion);
       this.target.addScaledVector(direction, value * 0.01 * zoomSpeed);
       this.updateCamera();
-    });
+    }, CanvasName.MAIN_SCENE);
 
-    platformAdapter.onPress((value) => {
+    platformAdapter.onPressButton((value) => {
       this.commands.add(value);
     });
 
-    platformAdapter.onRelease((value) => {
+    platformAdapter.onReleaseButton((value) => {
       this.commands.delete(value);
     });
   }
@@ -974,12 +1039,12 @@ export class CameraController implements ICameraController {
       dy = 0,
       dz = 0;
 
-    if (this.commands.has("forward")) dz += 1;
-    if (this.commands.has("back")) dz -= 1;
-    if (this.commands.has("left")) dx -= 1;
-    if (this.commands.has("right")) dx += 1;
-    if (this.commands.has("up")) dy += 1;
-    if (this.commands.has("down")) dy -= 1;
+    if (this.commands.has(Command.forward)) dz += 1;
+    if (this.commands.has(Command.back)) dz -= 1;
+    if (this.commands.has(Command.left)) dx -= 1;
+    if (this.commands.has(Command.right)) dx += 1;
+    if (this.commands.has(Command.up)) dy += 1;
+    if (this.commands.has(Command.down)) dy -= 1;
 
     if (dx !== 0 || dy !== 0 || dz !== 0) {
       move
@@ -1025,7 +1090,7 @@ export class CameraController implements ICameraController {
 
 --------------------------------------------------
 
---- Файл: src\rendering\interfaces.ts ---
+--- Файл: src/rendering/interfaces.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { PlatformAdapter } from "../adapters/platform-adapter";
@@ -1066,23 +1131,38 @@ export interface ICameraController {
 
 --------------------------------------------------
 
---- Файл: src\rendering\mini-map.ts ---
+--- Файл: src/rendering/mini-map.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "../physics/vector";
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import {
+  CanvasName,
+  Command,
+  PlatformAdapter,
+} from "../adapters/platform-adapter";
 
 export class MiniMap {
   private container: HTMLCanvasElement | undefined;
   private context: CanvasRenderingContext2D;
   private width: number = 200;
   private height: number = 200;
-  private scale: number = 0.00000000002; // масштаб: 1 а.е. = 0.1 пикселя
   private centerX: number;
   private centerY: number;
+  private zoomCount: number = 2;
+
+  private zoomMap = new Map([
+    [0, 0.00000000149],
+    [1, 0.0000000008],
+    [2, 0.00000000058],
+    [3, 0.00000000038],
+    [4, 0.000000000111],
+    [5, 0.0000000000603],
+    [6, 0.0000000000302],
+    [7, 0.0000000000192],
+  ]);
 
   constructor(platformAdapter: PlatformAdapter) {
-    this.container = platformAdapter.getCanvas();
+    this.container = platformAdapter.getCanvas(CanvasName.MINI_MAP);
 
     this.container.width = this.width;
     this.container.height = this.height;
@@ -1091,19 +1171,31 @@ export class MiniMap {
     this.centerX = this.width / 2;
     this.centerY = this.height / 2;
 
-    // Стилизация контейнера
     this.container.style.position = "absolute";
-    this.container.style.bottom = "20px";
+    this.container.style.top = "20px";
     this.container.style.left = "20px";
     this.container.style.borderRadius = "8px";
     this.container.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-    this.container.style.pointerEvents = "none";
+
+    this.setupEvents(platformAdapter);
   }
 
   update(objects: SpaceObject[]): void {
     this.clear();
     this.drawOrbits(objects);
     this.drawObjects(objects);
+  }
+
+  private setupEvents(platformAdapter: PlatformAdapter): void {
+    platformAdapter.onPress(() => {
+      this.zoomCount += 1;
+    }, CanvasName.MINI_MAP);
+
+    platformAdapter.onPressButton((value) => {
+      if (value === Command.zoomMap) {
+        this.zoomCount += 1;
+      }
+    });
   }
 
   private clear(): void {
@@ -1117,8 +1209,9 @@ export class MiniMap {
       if (obj.name === "Sun") return;
 
       const dx = obj.pos.x - sunPos.x;
-      const dy = obj.pos.y - sunPos.y;
-      const radius = Math.sqrt(dx * dx + dy * dy) * this.scale;
+      const dz = obj.pos.z - sunPos.z;
+      const scale = this.zoomMap.get(this.zoomCount % 8) || 0;
+      const radius = Math.sqrt(dx * dx + dz * dz) * scale;
 
       this.context.beginPath();
       this.context.ellipse(
@@ -1141,19 +1234,19 @@ export class MiniMap {
 
     objects.forEach((obj) => {
       const dx = obj.pos.x - sunPos.x;
-      const dy = obj.pos.y - sunPos.y;
-      const x = this.centerX + dx * this.scale;
-      const y = this.centerY + dy * this.scale;
+      const dz = obj.pos.z - sunPos.z;
 
-      const size = Math.max(2, obj.radius * this.scale);
+      const scale = this.zoomMap.get(this.zoomCount % 8) || 0;
+      const x = this.centerX + dx * scale;
+      const y = this.centerY + dz * scale;
 
-      // Рисуем планету
+      const size = Math.max(2, obj.radius * scale);
+
       this.context.beginPath();
       this.context.arc(x, y, size, 0, 2 * Math.PI);
       this.context.fillStyle = obj.color;
       this.context.fill();
 
-      // Подпись
       this.context.font = "8px sans-serif";
       this.context.fillStyle = "white";
       this.context.textAlign = "center";
@@ -1161,18 +1254,16 @@ export class MiniMap {
     });
   }
 
-  render(): void {
-    // В данном случае рендер происходит через canvas API автоматически
-  }
+  render(): void {}
 
-  getDOMElement(): HTMLElement {
+  getDOMElement(): HTMLElement | undefined {
     return this.container;
   }
 }
 
 --------------------------------------------------
 
---- Файл: src\rendering\object-factory.ts ---
+--- Файл: src/rendering/object-factory.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { IObjectFactory, ITextureManager } from "./interfaces";
@@ -1275,7 +1366,7 @@ export class ObjectFactory implements IObjectFactory {
     platformAdapter: PlatformAdapter
   ): THREE.Sprite | undefined {
     // Создаём canvas для текста
-    const canvas = platformAdapter.getCanvas();
+    const canvas = platformAdapter.getCanvasWithoutAddToDom();
 
     if (!canvas) return;
 
@@ -1352,9 +1443,9 @@ export class ObjectFactory implements IObjectFactory {
 
 --------------------------------------------------
 
---- Файл: src\rendering\renderer-core.ts ---
+--- Файл: src/rendering/renderer-core.ts ---
 import * as THREE from "three";
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import { CanvasName, PlatformAdapter } from "../adapters/platform-adapter";
 import { SpaceObject } from "../entities/space-object";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { ISceneManager } from "./interfaces";
@@ -1385,7 +1476,7 @@ export class RendererCore {
     this.objectFactory = objectFactory;
 
     this.renderer = new THREE.WebGLRenderer({
-      canvas: platformAdapter.getMainCanvas(),
+      canvas: platformAdapter.getCanvas(CanvasName.MAIN_SCENE),
       antialias: true,
     });
 
@@ -1426,7 +1517,9 @@ export class RendererCore {
     this.sceneManager.getScene().add(background);
 
     spaceObjects.forEach((obj) => {
-      if (obj.name === "Sun") {
+      if (obj.name === "Camera") {
+        return;
+      } else if (obj.name === "Sun") {
         const mesh = this.objectFactory.createSunMaterial(obj);
         const glowMesh = this.objectFactory.createGlowMaterial(obj, mesh);
 
@@ -1455,7 +1548,7 @@ export class RendererCore {
     const mesh = this.spaceObjectMeshes.get("Earth");
 
     if (mesh) {
-      this.cameraController.smoothMoveTo(mesh.position, 2000);
+      // this.cameraController.smoothMoveTo(mesh.position, 2000);
     }
   }
 
@@ -1463,6 +1556,18 @@ export class RendererCore {
     const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
 
     spaceObjects.forEach((obj) => {
+      if (obj.name === "Camera") {
+        this.cameraController.setPosition(
+          new THREE.Vector3(
+            obj.pos.x * scaleDist,
+            obj.pos.y * scaleDist,
+            obj.pos.z * scaleDist
+          )
+        );
+
+        return;
+      }
+
       const mesh = this.spaceObjectMeshes.get(obj.name);
       const label = this.spaceObjectLabels.get(obj.name);
 
@@ -1541,7 +1646,7 @@ export class RendererCore {
 
 --------------------------------------------------
 
---- Файл: src\rendering\scene-manager.ts ---
+--- Файл: src/rendering/scene-manager.ts ---
 import * as THREE from "three";
 import { ISceneManager } from "./interfaces";
 import { TextureManager } from "./texture-manager";
@@ -1580,7 +1685,7 @@ export class SceneManager implements ISceneManager {
 
 --------------------------------------------------
 
---- Файл: src\rendering\texture-manager.ts ---
+--- Файл: src/rendering/texture-manager.ts ---
 import * as THREE from "three";
 import { ITextureManager } from "./interfaces";
 
@@ -1613,7 +1718,7 @@ export class TextureManager implements ITextureManager {
 
 --------------------------------------------------
 
---- Файл: src\simulation\solar-system.ts ---
+--- Файл: src/simulation/solar-system.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { SPACE_OBJECTS } from "../config/space-objects";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
@@ -1712,12 +1817,12 @@ textures/
   plutohigh-min.jpg
   plutolow-min.jpg
   plutomedium-min.jpg
-  saturnhigh-min.jpg
-  saturnlow-min.jpg
-  saturnmedium-min.jpg
   saturn_ringhigh.png
   saturn_ringlow.png
   saturn_ringmedium.png
+  saturnhigh-min.jpg
+  saturnlow-min.jpg
+  saturnmedium-min.jpg
   sol.png
   spacehigh.jpg
   spacelow.jpg
@@ -1725,12 +1830,12 @@ textures/
   sun_color.jpg
   sun_emissive.jpg
   sun_normal.jpg
-  uranushigh-min.jpg
-  uranuslow-min.jpg
-  uranusmedium-min.jpg
   uranus_ringhigh.png
   uranus_ringlow.png
   uranus_ringmedium.png
+  uranushigh-min.jpg
+  uranuslow-min.jpg
+  uranusmedium-min.jpg
   venushigh-min.jpg
   venuslow-min.jpg
   venusmedium-min.jpg
