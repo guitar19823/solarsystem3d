@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "camera-controller_old.ts"
   ],
   "exclude": [
     "node_modules",

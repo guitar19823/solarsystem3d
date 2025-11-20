@@ -9,6 +9,7 @@ export const SIMULATION_CONFIG = {
   OBJECTS_RADIUS_SCALE: 1, // Коэффициент для увеличения радиусов планет (по умолчанию = 1 — строго пропорционально)
   LABEL_SCALE_FATOR: 5,
   SPEED_FACTOR: 0.0000001,
+  IMPULSE_STRENGTH: 500,
 
   // Масштаб для расстояний: 1 м = ? px
   get SCALE_DIST() {

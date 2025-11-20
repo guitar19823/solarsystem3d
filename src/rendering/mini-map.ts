@@ -1,4 +1,3 @@
-import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "../physics/vector";
 import {
@@ -27,7 +26,7 @@ export class MiniMap {
     [7, 0.0000000000192],
   ]);
 
-  constructor(platformAdapter: PlatformAdapter) {
+  constructor(private platformAdapter: PlatformAdapter) {
     this.container = platformAdapter.getCanvas(CanvasName.MINI_MAP);
 
     this.container.width = this.width;
@@ -46,7 +45,12 @@ export class MiniMap {
     this.setupEvents(platformAdapter);
   }
 
-  update(objects: SpaceObject[]): void {
+
+  public init(): void {
+    this.platformAdapter.appendToDom(this.container);
+  }
+
+  public render(objects: SpaceObject[]): void {
     this.clear();
     this.drawOrbits(objects);
     this.drawObjects(objects);
@@ -72,7 +76,7 @@ export class MiniMap {
     const sunPos = objects.find((o) => o.name === "Sun")?.pos || new Vector3D();
 
     objects.forEach((obj) => {
-      if (obj.name === "Sun") return;
+      if (obj.name === "Sun" || obj.name === "Camera") return;
 
       const dx = obj.pos.x - sunPos.x;
       const dz = obj.pos.z - sunPos.z;
@@ -118,11 +122,5 @@ export class MiniMap {
       this.context.textAlign = "center";
       this.context.fillText(obj.name, x, y + size + 10);
     });
-  }
-
-  render(): void {}
-
-  getDOMElement(): HTMLElement | undefined {
-    return this.container;
   }
 }

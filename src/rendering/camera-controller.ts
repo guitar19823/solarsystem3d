@@ -6,26 +6,19 @@ import {
   PlatformAdapter,
 } from "../adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
-import { Vector3D } from "../physics/vector";
 import { SolarSystem } from "../simulation/solar-system";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
+  private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private mousePrev: THREE.Vector2 = new THREE.Vector2();
+  private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
   private yaw: number = 0;
   private pitch: number = 0;
-
-  private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-
-  private damping: number = 0.25;
-  private velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
-
   private commands = new Set();
-  private moveSpeed: number = 500;
-
   private isMouseDown: boolean = false;
-  private mousePrev: THREE.Vector2 = new THREE.Vector2();
-  private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
   constructor(
     platformAdapter: PlatformAdapter,
@@ -42,76 +35,35 @@ export class CameraController implements ICameraController {
     this.updateCamera();
   }
 
-  update(): void {
-    this.applyDamping();
-    this.updateCameraPosition();
+  public update(): void {
     this.updateCamera();
   }
 
-  smoothMoveTo(position: THREE.Vector3, duration: number = 1000) {
-    const startPosition = this.camera.position.clone();
-    const targetPosition = position;
-    const startTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const t = Math.min(elapsed / duration, 1);
-
-      this.camera.position.lerpVectors(startPosition, targetPosition, t);
-      this.target.lerpVectors(startPosition, targetPosition, t);
-
-      this.updateCamera();
-
-      if (t < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
-  }
-
-  resize(width: number, height: number): void {
+  public resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
 
-  public applyVelocityImpulse(dx: number, dy: number, dz: number): void {
-    // Передаём импульс скорости в систему симуляции
-    // (это будет обработано в SpaceObject.update())
-    const impulse = new Vector3D(dx, dy, dz);
-    // Как передать это в SolarSystem? Нужен callback или событие.
-  }
-
-  getCamera(): THREE.PerspectiveCamera {
+  public getCamera(): THREE.PerspectiveCamera {
     return this.camera;
   }
 
-  lookAt(target: THREE.Vector3): void {
+  public lookAt(target: THREE.Vector3): void {
     this.target.copy(target);
     this.updateCamera();
   }
 
-  setPosition(position: THREE.Vector3): void {
+  public setPosition(position: THREE.Vector3): void {
     this.camera.position.copy(position);
     this.target.copy(position);
     this.updateCamera();
   }
 
-  reset(): void {
-    this.yaw = 0;
-    this.pitch = 0;
-    this.target.set(0, 0, 0);
-    this.velocity.set(0, 0);
-    this.updateCamera();
-  }
-
-  setEnabled(enabled: boolean): void {}
-
-  getPosition(): THREE.Vector3 {
+  public getPosition(): THREE.Vector3 {
     return this.camera.position;
   }
 
-  getDirection(): THREE.Vector3 {
+  public getDirection(): THREE.Vector3 {
     const direction = new THREE.Vector3();
     this.camera.getWorldDirection(direction);
 
@@ -148,60 +100,43 @@ export class CameraController implements ICameraController {
       this.updateCamera();
     }, CanvasName.MAIN_SCENE);
 
-    // platformAdapter.onPressButton((value) => {
-    //   this.commands.add(value);
-    // });
-
-    // platformAdapter.onReleaseButton((value) => {
-    //   this.commands.delete(value);
-    // });
-
     platformAdapter.onPressButton((value) => {
       this.commands.add(value);
 
-      if (["forward", "back", "left", "right", "up", "down"].includes(value)) {
-        const { forward, right, up } = this.getCameraAxes();
+      const { cameraZAxis, cameraXAxis, cameraYAxis } = this.getCameraAxes();
 
-        let impulse = new THREE.Vector3(0, 0, 0);
-        const impulseStrength = 10000; // Подберите под масштаб симуляции
+      let impulse = new THREE.Vector3(0, 0, 0);
+      const impulseStrength = SIMULATION_CONFIG.IMPULSE_STRENGTH;
 
-        switch (value) {
-          case "forward":
-            impulse.copy(forward).multiplyScalar(impulseStrength);
-            break;
-          case "back":
-            impulse.copy(forward).multiplyScalar(-impulseStrength);
-            break;
-          case "left":
-            impulse.copy(right).multiplyScalar(-impulseStrength);
-            break;
-          case "right":
-            impulse.copy(right).multiplyScalar(impulseStrength);
-            break;
-          case "up":
-            impulse.copy(up).multiplyScalar(impulseStrength);
-            break;
-          case "down":
-            impulse.copy(up).multiplyScalar(-impulseStrength);
-            break;
-        }
+      if (this.commands.has(Command.forward))
+        impulse.copy(cameraZAxis).multiplyScalar(impulseStrength);
 
-        // Передаём импульс в систему симуляции
-        this.solarSystem.applyCameraVelocityImpulse(
-          impulse.x,
-          impulse.y,
-          impulse.z
-        );
-      }
+      if (this.commands.has(Command.back))
+        impulse.copy(cameraZAxis).multiplyScalar(-impulseStrength);
+
+      if (this.commands.has(Command.left))
+        impulse.copy(cameraXAxis).multiplyScalar(-impulseStrength);
+
+      if (this.commands.has(Command.right))
+        impulse.copy(cameraXAxis).multiplyScalar(impulseStrength);
+
+      if (this.commands.has(Command.up))
+        impulse.copy(cameraYAxis).multiplyScalar(impulseStrength);
+
+      if (this.commands.has(Command.down))
+        impulse.copy(cameraYAxis).multiplyScalar(-impulseStrength);
+
+
+      this.solarSystem.applyCameraVelocityImpulse(
+        impulse.x,
+        impulse.y,
+        impulse.z
+      );
     });
 
     platformAdapter.onReleaseButton((value) => {
       this.commands.delete(value);
     });
-  }
-
-  private applyDamping(): void {
-    this.velocity.multiplyScalar(1 - this.damping);
   }
 
   private handleMouseRotate(): void {
@@ -210,43 +145,6 @@ export class CameraController implements ICameraController {
       .multiplyScalar(0.002);
 
     this.velocity.set(-delta.x, delta.y);
-  }
-
-  private updateCameraPosition(): void {
-    if (!this.commands.size) return;
-
-    const move = new THREE.Vector3();
-
-    const cameraDirection = new THREE.Vector3(0, 0, -1);
-    cameraDirection.applyQuaternion(this.camera.quaternion);
-
-    const right = new THREE.Vector3(1, 0, 0);
-    right.applyQuaternion(this.camera.quaternion);
-
-    const up = new THREE.Vector3(0, 1, 0);
-
-    let dx = 0,
-      dy = 0,
-      dz = 0;
-
-    if (this.commands.has(Command.forward)) dz += 1;
-    if (this.commands.has(Command.back)) dz -= 1;
-    if (this.commands.has(Command.left)) dx -= 1;
-    if (this.commands.has(Command.right)) dx += 1;
-    if (this.commands.has(Command.up)) dy += 1;
-    if (this.commands.has(Command.down)) dy -= 1;
-
-    if (dx !== 0 || dy !== 0 || dz !== 0) {
-      move
-        .addScaledVector(right, dx)
-        .addScaledVector(up, dy)
-        .addScaledVector(cameraDirection, dz);
-
-      move.multiplyScalar(this.moveSpeed * SIMULATION_CONFIG.SPEED_FACTOR);
-
-      this.camera.position.add(move);
-      this.target.add(move);
-    }
   }
 
   private updateCamera(): void {
@@ -278,19 +176,18 @@ export class CameraController implements ICameraController {
   }
 
   private getCameraAxes(): {
-    forward: THREE.Vector3;
-    right: THREE.Vector3;
-    up: THREE.Vector3;
+    cameraZAxis: THREE.Vector3;
+    cameraXAxis: THREE.Vector3;
+    cameraYAxis: THREE.Vector3;
   } {
-    const forward = new THREE.Vector3(0, 0, -1); // вперёд (в системе камеры)
-    const right = new THREE.Vector3(1, 0, 0); // вправо (в системе камеры)
-    const up = new THREE.Vector3(0, 1, 0); // вверх (в системе камеры)
+    const cameraZAxis = new THREE.Vector3(0, 0, -1);
+    const cameraXAxis = new THREE.Vector3(1, 0, 0);
+    const cameraYAxis = new THREE.Vector3(0, 1, 0);
 
-    // Преобразуем в глобальную систему координат через кватернион камеры
-    forward.applyQuaternion(this.camera.quaternion);
-    right.applyQuaternion(this.camera.quaternion);
-    up.applyQuaternion(this.camera.quaternion);
+    cameraZAxis.applyQuaternion(this.camera.quaternion);
+    cameraXAxis.applyQuaternion(this.camera.quaternion);
+    cameraYAxis.applyQuaternion(this.camera.quaternion);
 
-    return { forward, right, up };
+    return { cameraZAxis, cameraXAxis, cameraYAxis };
   }
 }

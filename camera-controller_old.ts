@@ -1,12 +1,12 @@
 import * as THREE from "three";
-import { ICameraController } from "./interfaces";
+import { ICameraController } from "./src/rendering/interfaces";
 import {
   CanvasName,
   Command,
   PlatformAdapter,
-} from "../adapters/platform-adapter";
-import { SIMULATION_CONFIG } from "../config/simulation-config";
-import { Vector3D } from "../physics/vector";
+} from "./src/adapters/platform-adapter";
+import { SIMULATION_CONFIG } from "./src/config/simulation-config";
+import { Vector3D } from "./src/physics/vector";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
