@@ -18,14 +18,14 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
   const textureManager = new TextureManager();
   const cameraController = new CameraController(platformAdapter, system);
   const miniMap = new MiniMap(platformAdapter);
-  const fps = new FPS(platformAdapter)
+  const fps = new FPS(platformAdapter);
 
   const objectFactory = new ObjectFactory(
     platformAdapter,
     textureManager,
     sceneManager,
     cameraController,
-    system,
+    system
   );
 
   const renderer = new RendererCore(
@@ -35,7 +35,7 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
     objectFactory,
     miniMap,
     system,
-    fps,
+    fps
   );
 
   renderer.init();
@@ -46,10 +46,12 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
     const deltaTime = currentTimestamp - lastTimestamp;
     lastTimestamp = currentTimestamp;
 
-    system.step(Math.min(
-      (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
-      SIMULATION_CONFIG.MAX_DT
-    ));
+    system.update(
+      Math.min(
+        (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
+        SIMULATION_CONFIG.MAX_DT
+      )
+    );
 
     renderer.render(deltaTime);
 
@@ -95,20 +97,20 @@ function initControls() {
     });
   }
 
-  // Управление speedFactor (дополнительный множитель скорости)
-  const speedFactorSlider = document.getElementById(
-    "speed-factor-slider"
+  // Управление impulseStrength (множитель ускорения)
+  const impulseStrength = document.getElementById(
+    "impulse-strength-slider"
   ) as HTMLInputElement;
-  const speedFactorValue = document.getElementById("speed-factor-value");
+  const speedFactorValue = document.getElementById("impulse-strength-value");
 
-  if (speedFactorSlider && speedFactorValue) {
-    const speedFactor = ConfigAPI.getSpeedFactor().toString();
-    speedFactorSlider.value = speedFactor;
+  if (impulseStrength && speedFactorValue) {
+    const speedFactor = ConfigAPI.getImpulseStrength().toString();
+    impulseStrength.value = speedFactor;
     speedFactorValue.textContent = speedFactor;
 
-    speedFactorSlider.addEventListener("input", () => {
-      const value = parseFloat(speedFactorSlider.value);
-      ConfigAPI.setSpeedFactor(value);
+    impulseStrength.addEventListener("input", () => {
+      const value = parseFloat(impulseStrength.value);
+      ConfigAPI.setImpulseStrength(value);
       speedFactorValue.textContent = value.toString();
     });
   }

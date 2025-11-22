@@ -1,24 +1,39 @@
-import { PlatformAdapter } from "../adapters/platform-adapter";
+import { CanvasName, PlatformAdapter } from "../adapters/platform-adapter";
 
 export class FPS {
-  private fpsElement: HTMLElement | null = null;
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null = null;
 
-  constructor(private platformAdapter: PlatformAdapter) {}
+  constructor(private platformAdapter: PlatformAdapter) {
+    this.canvas = this.platformAdapter.getCanvas(CanvasName.FPS);
+    this.canvas.style.position = "absolute";
+    this.canvas.style.top = "10px";
+    this.canvas.style.right = "10px";
+    this.canvas.style.pointerEvents = "none";
+    this.canvas.width = 100;
+    this.canvas.height = 30;
+
+    this.ctx = this.canvas.getContext("2d");
+  }
 
   public init() {
-    this.fpsElement = document.createElement("div");
-    this.fpsElement.style.position = "absolute";
-    this.fpsElement.style.top = "10px";
-    this.fpsElement.style.right = "10px";
-    this.fpsElement.style.color = "lime";
-
-    document.body.appendChild(this.fpsElement);
+    this.platformAdapter.appendToDom(this.canvas);
   }
 
   public render(deltaTime: number) {
-    if (this.fpsElement) {
-      const fps = 1000 / deltaTime;
-      this.fpsElement.textContent = `FPS: ${Math.floor(fps)}`;
+    if (!this.canvas || !this.ctx) {
+      return;
     }
+
+    const fps = 1000 / deltaTime;
+    const fpsText = `FPS: ${Math.floor(fps)}`;
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.font = "14px monospace";
+    this.ctx.textAlign = "right";
+    this.ctx.textBaseline = "top";
+    this.ctx.fillStyle = "lime";
+
+    this.ctx.fillText(fpsText, this.canvas.width - 5, 5);
   }
 }

@@ -1,11 +1,14 @@
-import { Vector3D } from "../physics/vector";
+import { Vector3D } from "../physics/vector-3d";
 
-export interface ISpaceObject {
+export interface ICelestialBody {
   name: string;
-  mass: number;
   pos: Vector3D;
   vel: Vector3D;
+  radius: number;
   color: string;
-  radius: number; // в метрах
+  mass?: number; // масса только для «листовых» тел
   texture?: string;
+  rotationPeriod?: number;
+  axialTilt?: number;
+  children?: ICelestialBody[];
 }

@@ -1,6 +1,7 @@
 export const enum CanvasName {
   MAIN_SCENE = "MAIN_SCENE",
   MINI_MAP = "MINI_MAP",
+  FPS = "FPS",
 }
 
 export const enum Command {

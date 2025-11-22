@@ -1,6 +1,4 @@
 import * as THREE from "three";
-import { SpaceObject } from "../entities/space-object";
-import { PlatformAdapter } from "../adapters/platform-adapter";
 
 export interface ITextureManager {
   loadTexture(path: string): THREE.Texture;

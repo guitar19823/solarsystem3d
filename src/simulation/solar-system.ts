@@ -1,50 +1,62 @@
-import { SpaceObject } from "../entities/space-object";
-import { SPACE_OBJECTS } from "../config/space-objects";
+import { solarSystem } from "../config/solar-system-config";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
-import { Vector3D } from "../physics/vector";
+import { Vector3D } from "../physics/vector-3d";
+import { CelestialBody } from "../entities/celestial-body";
 
 export class SolarSystem {
-  private spaceObjects: SpaceObject[] = [];
+  private flatten: CelestialBody[];
+  private solarSystem: CelestialBody;
   private dt: number;
 
   constructor(dt: number = SIMULATION_CONFIG.DEFAULT_DT) {
     this.dt = dt;
-    this.initSpaceObjects();
+
+    this.solarSystem = solarSystem;
+    this.flatten = this.flattenArray(this.solarSystem);
   }
 
-  private initSpaceObjects() {
-    for (const config of SPACE_OBJECTS) {
-      this.spaceObjects.push(
-        new SpaceObject(
-          config.name,
-          config.mass,
-          config.pos,
-          config.vel,
-          config.color,
-          config.radius,
-          config.texture
-        )
-      );
-    }
+  public getSolarSystem(): CelestialBody {
+    return solarSystem;
   }
 
-  getSpaceObjects() {
-    return this.spaceObjects;
-  }
+  public update(
+    dt: number = this.dt,
+    body: CelestialBody = this.solarSystem
+  ): void {
+    const children = body.children;
 
-  step(dt: number = this.dt) {
-    const spaceObjectsCopy = [...this.spaceObjects];
+    if (!children) return;
 
-    for (const spaceObject of this.spaceObjects) {
-      spaceObject.update(dt, spaceObjectsCopy);
-    }
+    children.forEach((obj) => {
+      obj.update(dt, children);
+
+      if (obj.children) {
+        this.update(dt, obj);
+      }
+    });
   }
 
   public applyCameraVelocityImpulse(dx: number, dy: number, dz: number): void {
-    const camera = this.spaceObjects.find((obj) => obj.name === "Camera");
+    const camera = this.flatten.find((obj) => obj.name === "Camera");
 
     if (camera) {
       camera.vel = camera.vel.add(new Vector3D(dx, dy, dz));
+    } else {
+      console.warn("Камера не найдена в системе!");
     }
+  }
+
+  private flattenArray(body: CelestialBody) {
+    const result: CelestialBody[] = [];
+
+    body.children?.forEach((obj) => {
+      if (obj.children) {
+        result.push(...this.flattenArray(obj));
+      } else {
+        result.push(obj);
+      }
+    });
+
+    return result;
   }
 }

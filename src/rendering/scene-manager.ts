@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { ISceneManager } from "./interfaces";
-import { TextureManager } from "./texture-manager";
+import { SIMULATION_CONFIG } from "../config/simulation-config";
 
 export class SceneManager implements ISceneManager {
   private scene: THREE.Scene;
@@ -22,8 +22,8 @@ export class SceneManager implements ISceneManager {
     pointLight.position.set(0, 0, 0);
     pointLight.shadow.mapSize.width = 2048;
     pointLight.shadow.mapSize.height = 2048;
-    pointLight.shadow.camera.near = 1;
-    pointLight.shadow.camera.far = 500000;
+    pointLight.shadow.camera.near = 0.1;
+    pointLight.shadow.camera.far = 10000000;
     pointLight.shadow.bias = 0.0001;
     pointLight.shadow.radius = 1;
     this.scene.add(pointLight);

@@ -1,114 +1,139 @@
 import * as THREE from "three";
-import { SpaceObject } from "../entities/space-object";
-import { ICameraController, IObjectFactory, ISceneManager, ITextureManager } from "./interfaces";
+import {
+  ICameraController,
+  IObjectFactory,
+  ISceneManager,
+  ITextureManager,
+} from "./interfaces";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { PlatformAdapter } from "../adapters/platform-adapter";
 import { SunShader } from "../ shaders/sun-shader";
 import { GlowShader } from "../ shaders/glow-shader";
 import { SolarSystem } from "../simulation/solar-system";
+import { CelestialBody } from "../entities/celestial-body";
 
 export class ObjectFactory implements IObjectFactory {
   private spaceObjectMaterials: Map<string, THREE.ShaderMaterial> = new Map();
   private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
+  private spaceObjectGroups: Map<string, THREE.Group> = new Map();
   private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
+  private rotationAccumulators: Map<string, number> = new Map();
 
   constructor(
     private platformAdapter: PlatformAdapter,
     private textureManager: ITextureManager,
     private sceneManager: ISceneManager,
     private cameraController: ICameraController,
-    private system: SolarSystem,
+    private system: SolarSystem
   ) {}
 
   public init(): void {
-    const background = this.createSpaceBackground();
-    const spaceObjects = this.system.getSpaceObjects();
+    this.sceneManager.getScene().add(this.createSpaceBackground());
+    this.initObjects(this.system.getSolarSystem());
+  }
 
-    this.sceneManager.getScene().add(background);
+  public render(deltaTime: number): void {
+    this.updateObjects(this.system.getSolarSystem(), deltaTime);
+    this.updateSunShader();
+  }
 
-    spaceObjects.forEach((obj) => {
-      if (obj.name === "Camera") {
+  private initObjects(spaceObject: CelestialBody) {
+    if (!spaceObject.children) return;
+
+    spaceObject.children.forEach((obj) => {
+      if (obj.children) {
+        this.initObjects(obj);
+
         return;
-      } else if (obj.name === "Sun") {
-        const mesh = this.createSunMaterial(obj);
+      }
+
+      if (obj.name === "Camera") return;
+
+      let mesh: THREE.Mesh;
+
+      if (obj.name === "Sun") {
+        mesh = this.createSunMaterial(obj);
         const glowMesh = this.createGlowMaterial(obj, mesh);
 
-        this.spaceObjectMeshes.set(obj.name, mesh);
         this.spaceObjectMeshes.set("SunGlow", glowMesh);
         this.sceneManager.getScene().add(mesh);
         this.sceneManager.getScene().add(glowMesh);
       } else {
-        const mesh = this.createSpaceObject(obj);
+        mesh = this.createSpaceObject(obj);
 
-        this.spaceObjectMeshes.set(obj.name, mesh);
         this.sceneManager.getScene().add(mesh);
       }
 
+      this.spaceObjectMeshes.set(obj.name, mesh);
+
       const labelSprite = this.createLabelSprite(obj.name);
+
+      // Создаём Group для трансформаций (даже если вращение не нужно)
+      const group = new THREE.Group();
+      group.add(mesh); // Mesh становится дочерним
+      this.sceneManager.getScene().add(group);
+      this.spaceObjectGroups.set(obj.name, group); // Сохраняем Group
 
       if (labelSprite) {
         this.spaceObjectLabels.set(obj.name, labelSprite);
         this.sceneManager.getScene().add(labelSprite);
       }
+
+      if (obj.rotationPeriod) {
+        this.rotationAccumulators.set(obj.name, 0);
+      }
     });
   }
 
-  public render(deltaTime: number): void {
-      const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
-      const spaceObjects = this.system.getSpaceObjects();
-  
-      spaceObjects.forEach((obj) => {
-        if (obj.name === "Camera") {
-          this.cameraController.setPosition(
-            new THREE.Vector3(
-              obj.pos.x * scaleDist,
-              obj.pos.y * scaleDist,
-              obj.pos.z * scaleDist
-            )
-          );
-  
-          return;
-        }
-  
-        const mesh = this.spaceObjectMeshes.get(obj.name);
-        const label = this.spaceObjectLabels.get(obj.name);
-  
-        if (!mesh) {
-          return;
-        }
-  
-        mesh.position.set(
-          obj.pos.x * scaleDist,
-          obj.pos.y * scaleDist,
-          obj.pos.z * scaleDist
+  private updateObjects(spaceObject: CelestialBody, deltaTime: number) {
+    if (!spaceObject.children) return;
+
+    const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
+
+    spaceObject.children.forEach((obj) => {
+      obj.pos.add(spaceObject.pos);
+
+      if (obj.children) {
+        this.updateObjects(obj, deltaTime);
+      }
+
+      const x = obj.pos.x + spaceObject.pos.x;
+      const y = obj.pos.y + spaceObject.pos.y;
+      const z = obj.pos.z + spaceObject.pos.z;
+
+      if (obj.name === "Camera") {
+        this.cameraController.setPosition(
+          new THREE.Vector3(x, y, z).multiplyScalar(scaleDist)
         );
-  
-        if (label) {
-          label.position.copy(mesh.position);
-          label.position.y += obj.radius * scaleDist * 1.3;
-  
-          const distance = this.cameraController
-            .getCamera()
-            .position.distanceTo(label.position);
-  
-          label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
-        }
-      });
-  
-      const glowMesh = this.spaceObjectMeshes.get("SunGlow");
-  
-      if (glowMesh) {
-        glowMesh.lookAt(this.cameraController.getCamera().position);
+
+        return;
       }
 
-      const sunMaterial = this.spaceObjectMaterials.get('Sun');
+      const mesh = this.spaceObjectMeshes.get(obj.name);
+      const group = this.spaceObjectGroups.get(obj.name);
+      const label = this.spaceObjectLabels.get(obj.name);
 
-      if (sunMaterial) {
-        sunMaterial.uniforms.uTime.value += deltaTime * 0.001;
+      if (!mesh || !group) return;
+
+      // 1. Обновляем позицию Group (а не Mesh!)
+      group.position.set(x, y, z).multiplyScalar(scaleDist);
+
+      // 2. Применяем вращение к Group
+      this.applyRotation(obj, group, mesh, deltaTime);
+
+      // 3. Обновляем лейбл
+      if (label) {
+        this.updateLabelPosition(label, group, obj.radius, scaleDist);
       }
-    }
 
-  private createSunMaterial(spaceObject: SpaceObject) {
+      // 4. Обновляем Glow для Солнца
+      if (obj.name === "Sun") {
+        this.updateSunGlow(mesh);
+      }
+    });
+  }
+
+  private createSunMaterial(spaceObject: CelestialBody) {
     const sunMaterial = new THREE.ShaderMaterial({
       uniforms: SunShader.uniforms,
       vertexShader: SunShader.vertexShader,
@@ -116,11 +141,14 @@ export class ObjectFactory implements IObjectFactory {
       transparent: false,
     });
 
-    sunMaterial.uniforms.uTexture.value = this.textureManager.loadTexture("sun_color.jpg");
-    sunMaterial.uniforms.uNormalMap.value = this.textureManager.loadTexture("sun_normal.jpg");
-    sunMaterial.uniforms.uEmissiveMap.value = this.textureManager.loadTexture("sun_emissive.jpg");
+    sunMaterial.uniforms.uTexture.value =
+      this.textureManager.loadTexture("sun_color.jpg");
+    sunMaterial.uniforms.uNormalMap.value =
+      this.textureManager.loadTexture("sun_normal.jpg");
+    sunMaterial.uniforms.uEmissiveMap.value =
+      this.textureManager.loadTexture("sun_emissive.jpg");
 
-    this.spaceObjectMaterials.set(spaceObject.name, sunMaterial)
+    this.spaceObjectMaterials.set(spaceObject.name, sunMaterial);
 
     const sunGeometry = new THREE.SphereGeometry(
       this.calcRadiusPx(spaceObject.radius),
@@ -137,8 +165,8 @@ export class ObjectFactory implements IObjectFactory {
     return sunMesh;
   }
 
-  private createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh) {
-    const glowRadius = this.calcRadiusPx(spaceObject.radius) * 5;
+  private createGlowMaterial(spaceObject: CelestialBody, mesh: THREE.Mesh) {
+    const glowRadius = this.calcRadiusPx(spaceObject.radius) * 7;
     const glowGeometry = new THREE.PlaneGeometry(glowRadius, glowRadius);
 
     const glowMaterial = new THREE.ShaderMaterial({
@@ -147,7 +175,8 @@ export class ObjectFactory implements IObjectFactory {
       fragmentShader: GlowShader.fragmentShader,
       transparent: true,
       blending: THREE.NormalBlending,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
     });
 
     const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -159,13 +188,13 @@ export class ObjectFactory implements IObjectFactory {
     return glowMesh;
   }
 
-  private createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
+  private createSpaceObject(spaceObject: CelestialBody): THREE.Mesh {
     const material = this.getSpaceObjectMaterial(spaceObject);
-    
+
     const geometry = new THREE.SphereGeometry(
       this.calcRadiusPx(spaceObject.radius),
       32,
-      32,
+      32
     );
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -177,7 +206,7 @@ export class ObjectFactory implements IObjectFactory {
   }
 
   private createSpaceBackground(): THREE.Mesh {
-    const spaceGeometry = new THREE.SphereGeometry(500000, 100, 100);
+    const spaceGeometry = new THREE.SphereGeometry(50000000, 100, 100);
     const spaceTexture = this.textureManager.loadTexture("spacehigh.jpg");
     spaceTexture.anisotropy = 10;
 
@@ -197,9 +226,7 @@ export class ObjectFactory implements IObjectFactory {
     return background;
   }
 
-  private createLabelSprite(
-    text: string,
-  ): THREE.Sprite | undefined {
+  private createLabelSprite(text: string): THREE.Sprite | undefined {
     const canvas = this.platformAdapter.getCanvasWithoutAddToDom();
 
     if (!canvas) return;
@@ -223,7 +250,7 @@ export class ObjectFactory implements IObjectFactory {
     return new THREE.Sprite(material);
   }
 
-  private getSpaceObjectMaterial(spaceObject: SpaceObject) {
+  private getSpaceObjectMaterial(spaceObject: CelestialBody) {
     if (spaceObject.texture) {
       const texture = this.textureManager.loadTexture(spaceObject.texture);
 
@@ -250,5 +277,78 @@ export class ObjectFactory implements IObjectFactory {
       SIMULATION_CONFIG.SCALE_DIST *
       SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE
     );
+  }
+
+  private applyRotation(
+    obj: CelestialBody,
+    group: THREE.Group,
+    mesh: THREE.Mesh, // явно указываем тип
+    deltaTime: number
+  ): void {
+    if (!obj.rotationPeriod) return;
+
+    const periodSec = obj.rotationPeriod * 24 * 3600;
+    const angularSpeed = (2 * Math.PI) / periodSec;
+    const accumulator = this.rotationAccumulators.get(obj.name) || 0;
+
+    const scaledDeltaTime =
+      (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT;
+    const newAccumulator = accumulator + angularSpeed * scaledDeltaTime;
+    this.rotationAccumulators.set(obj.name, newAccumulator);
+
+    // Получаем equatorGroup (дочернюю группу для вращения)
+    let equatorGroup = group.children.find(
+      (child) => (child as any).userData?.isEquatorGroup
+    ) as THREE.Group | undefined;
+
+    if (!equatorGroup) {
+      equatorGroup = new THREE.Group();
+      equatorGroup.userData.isEquatorGroup = true;
+
+      // Перемещаем mesh в equatorGroup
+      mesh.parent?.remove(mesh);
+      equatorGroup.add(mesh);
+      group.add(equatorGroup);
+    }
+
+    // Наклоняем ось (через group)
+    if (obj.axialTilt !== undefined) {
+      group.rotation.x = THREE.MathUtils.degToRad(obj.axialTilt);
+    } else {
+      group.rotation.x = 0;
+    }
+
+    // Вращаем equatorGroup вокруг локальной y
+    equatorGroup.rotation.y = newAccumulator;
+  }
+
+  private updateLabelPosition(
+    label: THREE.Sprite,
+    mesh: THREE.Group | THREE.Mesh,
+    radius: number,
+    scaleDist: number
+  ): void {
+    label.position.copy(mesh.position);
+    label.position.y += radius * scaleDist * 1.3;
+
+    const distance = this.cameraController
+      .getCamera()
+      .position.distanceTo(label.position);
+    label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
+  }
+
+  private updateSunGlow(mesh: THREE.Group | THREE.Mesh): void {
+    const glowMesh = this.spaceObjectMeshes.get("SunGlow");
+    if (glowMesh) {
+      glowMesh.position.copy(mesh.position);
+      glowMesh.lookAt(this.cameraController.getCamera().position);
+    }
+  }
+
+  private updateSunShader(): void {
+    const sunMaterial = this.spaceObjectMaterials.get("Sun");
+    if (sunMaterial) {
+      sunMaterial.uniforms.uTime.value += 0.001;
+    }
   }
 }

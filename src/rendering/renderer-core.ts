@@ -17,9 +17,8 @@ export class RendererCore {
     private objectFactory: IObjectFactory,
     private miniMap: MiniMap,
     private system: SolarSystem,
-    private fps: FPS,
+    private fps: FPS
   ) {
-
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.platformAdapter.getCanvas(CanvasName.MAIN_SCENE),
       antialias: true,
@@ -38,7 +37,7 @@ export class RendererCore {
     this.platformAdapter.onResize(() => {
       const width = this.platformAdapter.getWidth();
       const height = this.platformAdapter.getHeight();
-      
+
       this.renderer.setSize(width, height);
       this.cameraController.resize(width, height);
     });
@@ -55,8 +54,8 @@ export class RendererCore {
 
   public render(deltaTime: number): void {
     this.objectFactory.render(deltaTime);
-    this.miniMap.render(this.system.getSpaceObjects());
-    this.fps.render(deltaTime)
+    this.miniMap.render(this.system.getSolarSystem());
+    this.fps.render(deltaTime);
 
     this.renderer.render(
       this.sceneManager.getScene(),

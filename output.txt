@@ -1,5 +1,5 @@
 
---- Файл: src/ shaders/glow-shader.ts ---
+--- Файл: src\ shaders\glow-shader.ts ---
 export const GlowShader = {
   uniforms: {
     color: { value: [1.0, 1.0, 1.0] },
@@ -35,7 +35,7 @@ export const GlowShader = {
 
 --------------------------------------------------
 
---- Файл: src/ shaders/sun-shader.ts ---
+--- Файл: src\ shaders\sun-shader.ts ---
 export const SunShader = {
   uniforms: {
     uTime: { value: 0 },
@@ -148,7 +148,7 @@ export const SunShader = {
 
 --------------------------------------------------
 
---- Файл: src/adapters/browser-adapter.ts ---
+--- Файл: src\adapters\browser-adapter.ts ---
 import { CanvasName, Command, PlatformAdapter } from "./platform-adapter";
 
 export class BrowserAdapter implements PlatformAdapter {
@@ -283,10 +283,11 @@ export class BrowserAdapter implements PlatformAdapter {
 
 --------------------------------------------------
 
---- Файл: src/adapters/platform-adapter.ts ---
+--- Файл: src\adapters\platform-adapter.ts ---
 export const enum CanvasName {
   MAIN_SCENE = "MAIN_SCENE",
   MINI_MAP = "MINI_MAP",
+  FPS = "FPS",
 }
 
 export const enum Command {
@@ -336,9 +337,8 @@ export interface PlatformAdapter {
 
 --------------------------------------------------
 
---- Файл: src/config/config-api.ts ---
+--- Файл: src\config\config-api.ts ---
 import { Vector3D } from "../physics/vector";
-import { SPACE_OBJECTS, ISpaceObjectConfig } from "./space-objects";
 import { SIMULATION_CONFIG } from "./simulation-config";
 
 export interface SimulationConfig {
@@ -350,8 +350,6 @@ export interface SimulationConfig {
 }
 
 export class ConfigAPI {
-  private static spaceObjects: ISpaceObjectConfig[] = [...SPACE_OBJECTS]; // изначальные данные
-
   static setSimulationSpeed(factor: number): void {
     if (factor <= 0) {
       throw new Error("Simulation speed factor must be positive");
@@ -402,51 +400,20 @@ export class ConfigAPI {
 
   static setSpeedFactor(factor: number): void {
     if (factor <= 0) {
-      throw new Error("Label scale factor must be positive");
+      throw new Error("Speed factor must be positive");
     }
     SIMULATION_CONFIG.SPEED_FACTOR = factor / 10000000;
   }
 
-  static addSpaceObject(config: ISpaceObjectConfig): void {
-    const existing = ConfigAPI.getSpaceObject(config.name);
-    if (existing) {
-      throw new Error(`SpaceObject with name "${config.name}" already exists`);
+  static getImpulseStrength(): number {
+    return SIMULATION_CONFIG.IMPULSE_STRENGTH;
+  }
+
+  static setImpulseStrength(factor: number): void {
+    if (factor <= 0) {
+      throw new Error("Impulse strength must be positive");
     }
-    ConfigAPI.spaceObjects.push(config);
-  }
-
-  static removeSpaceObject(name: string): boolean {
-    const index = ConfigAPI.findSpaceObjectIndex(name);
-    if (index === -1) {
-      return false;
-    }
-    ConfigAPI.spaceObjects.splice(index, 1);
-    return true;
-  }
-
-  static updateSpaceObject(
-    name: string,
-    updates: Partial<ISpaceObjectConfig>
-  ): boolean {
-    const spaceObject = ConfigAPI.getSpaceObject(name);
-    if (!spaceObject) {
-      return false;
-    }
-
-    Object.assign(spaceObject, updates);
-    return true;
-  }
-
-  static getSpaceObject(name: string): ISpaceObjectConfig | undefined {
-    return ConfigAPI.spaceObjects.find((p) => p.name === name);
-  }
-
-  static getAllSpaceObjects(): ISpaceObjectConfig[] {
-    return [...ConfigAPI.spaceObjects]; // возвращаем копию
-  }
-
-  private static findSpaceObjectIndex(name: string): number {
-    return ConfigAPI.spaceObjects.findIndex((p) => p.name === name);
+    SIMULATION_CONFIG.IMPULSE_STRENGTH = factor;
   }
 
   static resetSimulationConfig(): void {
@@ -456,25 +423,11 @@ export class ConfigAPI {
     SIMULATION_CONFIG.AU_IN_PX = 100;
     SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE = 1;
   }
-
-  static resetSpaceObjectData(): void {
-    ConfigAPI.spaceObjects = [
-      {
-        name: "Sun",
-        mass: 1.989e30,
-        pos: new Vector3D(0, 0, 0),
-        vel: new Vector3D(0, 0, 0),
-        color: "yellow",
-        radius: 696340000,
-      },
-      // ... остальные планеты как в исходном SPACE_OBJECTS
-    ];
-  }
 }
 
 --------------------------------------------------
 
---- Файл: src/config/simulation-config.ts ---
+--- Файл: src\config\simulation-config.ts ---
 export const SIMULATION_CONFIG = {
   SIMULATION_DT: 1, // шаг симуляции (x реального времени)
   DEFAULT_DT: 86400,
@@ -484,8 +437,9 @@ export const SIMULATION_CONFIG = {
   AU: 1.496e11, // 1 а.е. = 1.496e11 м
 
   OBJECTS_RADIUS_SCALE: 1, // Коэффициент для увеличения радиусов планет (по умолчанию = 1 — строго пропорционально)
-  LABEL_SCALE_FATOR: 5,
+  LABEL_SCALE_FATOR: 7,
   SPEED_FACTOR: 0.0000001,
+  IMPULSE_STRENGTH: 500,
 
   // Масштаб для расстояний: 1 м = ? px
   get SCALE_DIST() {
@@ -495,133 +449,308 @@ export const SIMULATION_CONFIG = {
 
 --------------------------------------------------
 
---- Файл: src/config/space-objects.ts ---
+--- Файл: src\config\space-objects.ts ---
+import { CelestialBody } from "../entities/celestial-body";
 import { Vector3D } from "../physics/vector";
 
-export interface ISpaceObjectConfig {
+// 1. Солнце
+const sun = new CelestialBody({
+  name: "Sun",
+  pos: new Vector3D(0, 0, 0),
+  vel: new Vector3D(0, 0, 0),
+  radius: 696340000,
+  mass: 1.989e30,
+  texture: "sun.jpg",
+  rotationPeriod: 25.05,
+  axialTilt: 7.25,
+});
+
+// 2. Меркурий
+const mercury = new CelestialBody({
+  name: "Mercury",
+  pos: new Vector3D(5.791e10, 0, 0),
+  vel: new Vector3D(0, 0, -47362),
+  radius: 2439700,
+  mass: 3.3011e23,
+  texture: "mercury.jpg",
+  rotationPeriod: 58.65,
+  axialTilt: 0.01,
+});
+
+// 3. Венера
+const venus = new CelestialBody({
+  name: "Venus",
+  pos: new Vector3D(1.082e11, 0, 0),
+  vel: new Vector3D(0, 0, -35020),
+  radius: 6051800,
+  mass: 4.8675e24,
+  texture: "venus.jpg",
+  rotationPeriod: -243.02,
+  axialTilt: 177.36,
+});
+
+// 4. Земля + Луна
+const earth = new CelestialBody({
+  name: "Earth",
+  pos: new Vector3D(-4671000, 0, 0),
+  vel: new Vector3D(0, -12.6, 0),
+  radius: 6371000,
+  mass: 5.972e24,
+  texture: "earth.jpg",
+  rotationPeriod: 1.0,
+  axialTilt: 23.44,
+});
+
+const moon = new CelestialBody({
+  name: "Moon",
+  pos: new Vector3D(379729000, 0, 0),
+  vel: new Vector3D(0, 1022, 0),
+  radius: 1737000,
+  mass: 7.342e22,
+  texture: "moon.jpg",
+  rotationPeriod: 27.32,
+  axialTilt: 6.68,
+});
+
+const camera = new CelestialBody({
+  name: "Camera",
+  pos: new Vector3D(1.4962e11, 0, 0),
+  vel: new Vector3D(0, 0, -29783),
+  radius: 1737000,
+  mass: 1000,
+});
+
+const earthMoonSystem = new CelestialBody({
+  name: "EarthMoonSystem",
+  pos: new Vector3D(1.496e11, 0, 0),
+  vel: new Vector3D(0, 0, -29783),
+  radius: 3.844e8 + 6.371e6 + 1.737e6,
+  children: [earth, moon],
+});
+
+// 5. Марс + спутники
+const mars = new CelestialBody({
+  name: "Mars",
+  pos: new Vector3D(-9378000, 0, 0),
+  vel: new Vector3D(0, -0.14, 0),
+  radius: 3389500,
+  mass: 6.417e23,
+  texture: "mars.jpg",
+  rotationPeriod: 1.026,
+  axialTilt: 25.19,
+});
+
+const phobos = new CelestialBody({
+  name: "Phobos",
+  pos: new Vector3D(9284220, 0, 0),
+  vel: new Vector3D(0, 2138, 0),
+  radius: 11267,
+  mass: 1.07e16,
+  texture: "phobos.jpg",
+});
+
+const deimos = new CelestialBody({
+  name: "Deimos",
+  pos: new Vector3D(23460000, 0, 0),
+  vel: new Vector3D(0, 1352, 0),
+  radius: 6200,
+  mass: 1.48e15,
+  texture: "deimos.jpg",
+});
+
+const marsSystem = new CelestialBody({
+  name: "MarsSystem",
+  pos: new Vector3D(2.279e11, 0, 0),
+  vel: new Vector3D(0, 0, -24077),
+  radius: 23460e3 + 6200,
+  children: [mars, phobos, deimos],
+});
+
+// 6. Юпитер + галилеевы спутники
+const jupiter = new CelestialBody({
+  name: "Jupiter",
+  pos: new Vector3D(-1980000, 0, 0),
+  vel: new Vector3D(0, -2.7, 0),
+  radius: 69911000,
+  mass: 1.898e27,
+  texture: "jupiter.jpg",
+  rotationPeriod: 0.414,
+  axialTilt: 3.13,
+});
+
+const io = new CelestialBody({
+  name: "Io",
+  pos: new Vector3D(419720000, 0, 0),
+  vel: new Vector3D(0, 17334, 0),
+  radius: 1821500,
+  mass: 8.93e22,
+  texture: "io.jpg",
+});
+
+const europa = new CelestialBody({
+  name: "Europa",
+  pos: new Vector3D(671034000, 0, 0),
+  vel: new Vector3D(0, 13740, 0),
+  radius: 1560800,
+  mass: 4.8e22,
+  texture: "europa.jpg",
+});
+
+const ganymede = new CelestialBody({
+  name: "Ganymede",
+  pos: new Vector3D(1070400000, 0, 0),
+  vel: new Vector3D(0, 10880, 0),
+  radius: 2634100,
+  mass: 1.5e23,
+  texture: "ganymede.jpg",
+});
+
+const callisto = new CelestialBody({
+  name: "Callisto",
+  pos: new Vector3D(1882700000, 0, 0),
+  vel: new Vector3D(0, 8204, 0),
+  radius: 2410300,
+  mass: 1.08e23,
+  texture: "callisto.jpg",
+});
+
+const jupiterSystem = new CelestialBody({
+  name: "JupiterSystem",
+  pos: new Vector3D(7.785e11, 0, 0),
+  vel: new Vector3D(0, 0, -13070),
+  radius: 1.88e9,
+  children: [jupiter, io, europa, ganymede, callisto],
+});
+
+// 7. Сатурн + Титан
+const saturn = new CelestialBody({
+  name: "Saturn",
+  pos: new Vector3D(-291000, 0, 0),
+  vel: new Vector3D(0, -0.4, 0),
+  radius: 58232000,
+  mass: 5.683e26,
+  texture: "saturn.jpg",
+  rotationPeriod: 0.444,
+  axialTilt: 26.73,
+});
+
+const titan = new CelestialBody({
+  name: "Titan",
+  pos: new Vector3D(1221709000, 0, 0),
+  vel: new Vector3D(0, 5570, 0),
+  radius: 2574700,
+  mass: 1.35e23,
+  texture: "titan.jpg",
+});
+
+const saturnSystem = new CelestialBody({
+  name: "SaturnSystem",
+  pos: new Vector3D(1.434e12, 0, 0),
+  vel: new Vector3D(0, 0, -9690),
+  radius: 1.22e9,
+  children: [saturn, titan],
+});
+
+// 8. Уран (с системой спутников, упрощённо)
+const uranus = new CelestialBody({
+  name: "Uranus",
+  pos: new Vector3D(0, 0, 0),
+  vel: new Vector3D(0, 0, 0),
+  radius: 25362000,
+  mass: 8.681e25,
+  texture: "uranus.jpg",
+  rotationPeriod: -0.718,
+  axialTilt: 97.77,
+});
+
+const uranusSystem = new CelestialBody({
+  name: "UranusSystem",
+  pos: new Vector3D(2.871e12, 0, 0),
+  vel: new Vector3D(0, 0, -6810),
+  radius: 5e8,
+  children: [uranus],
+});
+
+// 9. Нептун (с системой спутников, упрощённо)
+const neptune = new CelestialBody({
+  name: "Neptune",
+  pos: new Vector3D(0, 0, 0),
+  vel: new Vector3D(0, 0, 0),
+  radius: 24622000,
+  mass: 1.024e26,
+  texture: "neptune.jpg",
+  rotationPeriod: 0.671,
+  axialTilt: 28.32,
+});
+
+const neptuneSystem = new CelestialBody({
+  name: "NeptuneSystem",
+  pos: new Vector3D(4.495e12, 0, 0),
+  vel: new Vector3D(0, 0, -5430),
+  radius: 4e8,
+  children: [neptune],
+});
+
+// === СОЛНЕЧНАЯ СИСТЕМА (итоговый объект) ===
+export const spaceObjects = new CelestialBody({
+  name: "SolarSystem",
+  pos: new Vector3D(0, 0, 0),
+  vel: new Vector3D(0, 0, 0),
+  radius: 4.5e12,
+  children: [
+    camera,
+    sun,
+    mercury,
+    venus,
+    earthMoonSystem,
+    // marsSystem,
+    // jupiterSystem,
+    // saturnSystem,
+    // uranusSystem,
+    // neptuneSystem,
+  ],
+});
+
+--------------------------------------------------
+
+--- Файл: src\entities\celestial-body.ts ---
+import { Vector3D } from "../physics/vector";
+import { ICelestialBody } from "./interface";
+
+export class CelestialBody implements ICelestialBody {
   name: string;
-  mass: number;
   pos: Vector3D;
   vel: Vector3D;
-  color: string;
-  radius: number; // в метрах
+  radius: number;
+  mass?: number;
   texture?: string;
-}
+  rotationPeriod?: number;
+  axialTilt?: number;
+  children?: ICelestialBody[];
 
-export const SPACE_OBJECTS: ISpaceObjectConfig[] = [
-  {
-    name: "Camera",
-    mass: 1000,
-    pos: new Vector3D(1.4961e11, 0, 0),
-    vel: new Vector3D(0, 0, -29783),
-    color: "cyan",
-    radius: 1,
-  },
-  {
-    name: "Sun",
-    mass: 1.989e30,
-    pos: new Vector3D(0, 0, 0),
-    vel: new Vector3D(0, 0, -0),
-    color: "white",
-    radius: 696340000,
-  },
-  {
-    name: "Mercury",
-    mass: 3.3011e23,
-    pos: new Vector3D(5.791e10, 0, 0),
-    vel: new Vector3D(0, 0, -47362),
-    color: "gray",
-    radius: 2439700,
-    texture: "mercuryhigh-min.jpg",
-  },
-  {
-    name: "Venus",
-    mass: 4.8675e24,
-    pos: new Vector3D(1.082e11, 0, 0),
-    vel: new Vector3D(0, 0, -35020),
-    color: "orange",
-    radius: 6051800,
-    texture: "venushigh-min.jpg",
-  },
-  {
-    name: "Earth",
-    mass: 5.972e24,
-    pos: new Vector3D(1.496e11, 0, 0),
-    vel: new Vector3D(0, 0, -29783),
-    color: "blue",
-    radius: 6371000,
-    texture: "earthhigh-min.jpg",
-  },
-  {
-    name: "Mars",
-    mass: 6.4171e23,
-    pos: new Vector3D(2.279e11, 0, 0),
-    vel: new Vector3D(0, 0, -24077),
-    color: "red",
-    radius: 3389500,
-    texture: "marshigh-min.jpg",
-  },
-  {
-    name: "Jupiter",
-    mass: 1.8982e27,
-    pos: new Vector3D(7.785e11, 0, 0),
-    vel: new Vector3D(0, 0, -13070),
-    color: "brown",
-    radius: 69911000,
-    texture: "jupiterhigh-min.jpg",
-  },
-  {
-    name: "Saturn",
-    mass: 5.6834e26,
-    pos: new Vector3D(1.434e12, 0, 0),
-    vel: new Vector3D(0, 0, -9690),
-    color: "gold",
-    radius: 58232000,
-    texture: "saturnhigh-min.jpg",
-  },
-  {
-    name: "Uranus",
-    mass: 8.681e25,
-    pos: new Vector3D(2.871e12, 0, 0),
-    vel: new Vector3D(0, 0, -6810),
-    color: "lightblue",
-    radius: 25362000,
-    texture: "uranushigh-min.jpg",
-  },
-  {
-    name: "Neptune",
-    mass: 1.0241e26,
-    pos: new Vector3D(4.495e12, 0, 0),
-    vel: new Vector3D(0, 0, -5430),
-    color: "darkblue",
-    radius: 24622000,
-    texture: "neptunehigh-min.jpg",
-  },
-];
+  constructor(data: Omit<ICelestialBody, "totalMass">) {
+    this.name = data.name;
+    this.pos = data.pos;
+    this.vel = data.vel;
+    this.radius = data.radius;
+    this.mass = data.mass;
+    this.texture = data.texture;
+    this.rotationPeriod = data.rotationPeriod;
+    this.axialTilt = data.axialTilt;
+    this.children = data.children;
+  }
 
---------------------------------------------------
-
---- Файл: src/entities/celestial-body.ts ---
-import { Vector3D } from "../physics/vector";
-import { ISpaceObject } from "./interface";
-
-export abstract class CelestialBody implements ISpaceObject {
-  constructor(
-    public name: string,
-    public mass: number,
-    public pos: Vector3D,
-    public vel: Vector3D,
-    public color: string,
-    public radius: number,
-    public texture: string | undefined
-  ) {}
-
-  abstract update(dt: number, others: ISpaceObject[]): void;
+  get totalMass(): number {
+    if (typeof this.mass === "number") return this.mass;
+    if (this.children)
+      return this.children.reduce((sum, child) => sum + child.totalMass, 0);
+    return 0;
+  }
 }
 
 --------------------------------------------------
 
---- Файл: src/entities/interface.ts ---
+--- Файл: src\entities\interface.ts ---
 import { Vector3D } from "../physics/vector";
 
 export interface ISpaceObject {
@@ -632,37 +761,104 @@ export interface ISpaceObject {
   color: string;
   radius: number; // в метрах
   texture?: string;
+  rotationPeriod?: number; // период вращения в земных сутках
+  axialTilt?: number;
+}
+
+export interface ICelestialBody {
+  name: string;
+  pos: Vector3D;
+  vel: Vector3D;
+  radius: number;
+  mass?: number; // масса только для «листовых» тел
+  texture?: string;
+  rotationPeriod?: number;
+  axialTilt?: number;
+  children?: ICelestialBody[];
+  get totalMass(): number;
 }
 
 --------------------------------------------------
 
---- Файл: src/entities/space-object.ts ---
+--- Файл: src\entities\space-object.ts ---
 import { CelestialBody } from "./celestial-body";
+import { Vector3D } from "../physics/vector";
 import { GravityCalculator } from "../physics/gravity";
 
 export class SpaceObject extends CelestialBody {
-  update(dt: number, others: SpaceObject[]) {
-    // Метод (Эйлер)
-    // const acc = GravityCalculator.calculateAcceleration(this, others);
-    // this.vel = this.vel.add(acc.multiply(dt));
-    // this.pos = this.pos.add(this.vel.multiply(dt));
+  public relativePos: Vector3D;
+  public relativeVel: Vector3D;
+  public parent: SpaceObject | null = null;
 
-    // Метод (Верле)
-    const posOld = this.pos;
-    const acc = GravityCalculator.calculateAcceleration(this, others);
+  constructor(
+    name: string,
+    mass: number,
+    pos: Vector3D,
+    vel: Vector3D,
+    relativePos: Vector3D,
+    relativeVel: Vector3D,
+    color: string | null,
+    radius: number,
+    texture: string,
+    rotationPeriod: number,
+    axialTilt: number,
+    totalMass: number,
+    children: CelestialBody[]
+  ) {
+    super({
+      name,
+      mass,
+      pos,
+      vel,
+      color,
+      radius,
+      texture,
+      rotationPeriod,
+      axialTilt,
+      children,
+    });
+    this.relativePos = relativePos.clone();
+    this.relativeVel = relativeVel.clone();
+  }
 
-    this.pos = posOld
-      .add(this.vel.multiply(dt))
-      .add(acc.multiply(0.5 * dt * dt));
+  public update(dt: number, allObjects: SpaceObject[]): void {
+    if (this.parent) {
+      this.pos = this.parent.pos.add(this.relativePos);
+      this.vel = this.parent.vel.add(this.relativeVel);
+      return;
+    }
 
-    const accNew = GravityCalculator.calculateAcceleration(this, others);
-    this.vel = this.vel.add(acc.add(accNew).multiply(0.5 * dt));
+    const acc = GravityCalculator.calculateAcceleration(this, allObjects);
+    this.vel = this.vel.add(acc.multiply(dt));
+    this.pos = this.pos.add(this.vel.multiply(dt));
+  }
+
+  public isSatellite(): boolean {
+    return this.parent !== null;
+  }
+
+  public updateChildrenPositions(
+    dt: number,
+    parent: SpaceObject,
+    allObjects: SpaceObject[]
+  ): void {
+    for (const child of parent.children!) {
+      const childObject = allObjects.find((obj) => obj.name === child.name);
+
+      if (!childObject) {
+        console.warn(`Объект "${child.name}" не найден в системе`);
+        continue;
+      }
+
+      childObject.pos = parent.pos.add(childObject.relativePos);
+      childObject.vel = parent.vel.add(childObject.relativeVel);
+    }
   }
 }
 
 --------------------------------------------------
 
---- Файл: src/main.ts ---
+--- Файл: src\main.ts ---
 import { PlatformAdapter } from "./adapters/platform-adapter";
 import { BrowserAdapter } from "./adapters/browser-adapter";
 import { SolarSystem } from "./simulation/solar-system";
@@ -674,32 +870,36 @@ import { CameraController } from "./rendering/camera-controller";
 import { TextureManager } from "./rendering/texture-manager";
 import { ObjectFactory } from "./rendering/object-factory";
 import { RendererCore } from "./rendering/renderer-core";
+import { MiniMap } from "./rendering/mini-map";
+import { FPS } from "./rendering/fps";
 
 export function runSimulation(platformAdapter: PlatformAdapter) {
   const system = new SolarSystem(SIMULATION_CONFIG.MAX_DT);
   const sceneManager = new SceneManager();
   const textureManager = new TextureManager();
-  const objectFactory = new ObjectFactory(textureManager);
   const cameraController = new CameraController(platformAdapter, system);
+  const miniMap = new MiniMap(platformAdapter);
+  const fps = new FPS(platformAdapter);
+
+  const objectFactory = new ObjectFactory(
+    platformAdapter,
+    textureManager,
+    sceneManager,
+    cameraController,
+    system
+  );
 
   const renderer = new RendererCore(
     platformAdapter,
     sceneManager,
     cameraController,
-    objectFactory
+    objectFactory,
+    miniMap,
+    system,
+    fps
   );
 
-  renderer.initialize();
-
-  const fpsElement = document.createElement("div");
-  fpsElement.style.position = "absolute";
-  fpsElement.style.top = "10px";
-  fpsElement.style.right = "10px";
-  fpsElement.style.color = "lime";
-  document.body.appendChild(fpsElement);
-  renderer.setFpsElement(fpsElement);
-
-  renderer.initSpaceObjects(system.getSpaceObjects());
+  renderer.init();
 
   let lastTimestamp = 0;
 
@@ -707,23 +907,19 @@ export function runSimulation(platformAdapter: PlatformAdapter) {
     const deltaTime = currentTimestamp - lastTimestamp;
     lastTimestamp = currentTimestamp;
 
-    const simulationTimeStep = Math.min(
-      (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
-      SIMULATION_CONFIG.MAX_DT
+    system.step(
+      Math.min(
+        (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT,
+        SIMULATION_CONFIG.MAX_DT
+      )
     );
 
-    system.step(simulationTimeStep);
-    renderer.updateSpaceObjects(system.getSpaceObjects());
     renderer.render(deltaTime);
 
     platformAdapter.requestAnimationFrame(animate);
   }
 
   platformAdapter.requestAnimationFrame(animate);
-
-  platformAdapter.onResize(() => {
-    renderer.initialize();
-  });
 }
 
 function initControls() {
@@ -762,20 +958,20 @@ function initControls() {
     });
   }
 
-  // Управление speedFactor (дополнительный множитель скорости)
-  const speedFactorSlider = document.getElementById(
-    "speed-factor-slider"
+  // Управление impulseStrength (множитель ускорения)
+  const impulseStrength = document.getElementById(
+    "impulse-strength-slider"
   ) as HTMLInputElement;
-  const speedFactorValue = document.getElementById("speed-factor-value");
+  const speedFactorValue = document.getElementById("impulse-strength-value");
 
-  if (speedFactorSlider && speedFactorValue) {
-    const speedFactor = ConfigAPI.getSpeedFactor().toString();
-    speedFactorSlider.value = speedFactor;
+  if (impulseStrength && speedFactorValue) {
+    const speedFactor = ConfigAPI.getImpulseStrength().toString();
+    impulseStrength.value = speedFactor;
     speedFactorValue.textContent = speedFactor;
 
-    speedFactorSlider.addEventListener("input", () => {
-      const value = parseFloat(speedFactorSlider.value);
-      ConfigAPI.setSpeedFactor(value);
+    impulseStrength.addEventListener("input", () => {
+      const value = parseFloat(impulseStrength.value);
+      ConfigAPI.setImpulseStrength(value);
       speedFactorValue.textContent = value.toString();
     });
   }
@@ -787,7 +983,7 @@ initControls();
 
 --------------------------------------------------
 
---- Файл: src/physics/gravity.ts ---
+--- Файл: src\physics\gravity.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "./vector";
 
@@ -802,15 +998,14 @@ export class GravityCalculator {
 
     for (const other of others) {
       if (other === spaceObject) continue;
+      if (other.children) continue; // пропускаем контейнеры
 
-      const dx = other.pos.x - spaceObject.pos.x;
-      const dy = other.pos.y - spaceObject.pos.y;
-      const dz = other.pos.z - spaceObject.pos.z;
-      const distSq = dx * dx + dy * dy + dz * dz;
+      const r = other.pos.subtract(spaceObject.pos); // вектор к другому телу
+      const distSq = r.magnitudeSquared(); // используем метод Vector3D
 
-      if (distSq < 1e-20) continue;
+      if (distSq < 1e-20) continue; // слишком близко — пропускаем
 
-      const dist = Math.sqrt(distSq);
+      const dist = Math.sqrt(distSq); // корень нужен только для minDist
       const minDist = spaceObject.radius + other.radius;
 
       if (dist < minDist) {
@@ -818,11 +1013,9 @@ export class GravityCalculator {
         continue;
       }
 
-      const forceFactor = (this.G * other.mass) / (dist * distSq);
-
-      acc = acc.add(
-        new Vector3D(forceFactor * dx, forceFactor * dy, forceFactor * dz)
-      );
+      // Ускорение: a = G * M / r²
+      const accMagnitude = (this.G * other.totalMass) / distSq;
+      acc = acc.add(r.normalize().multiply(accMagnitude));
     }
 
     return acc;
@@ -831,36 +1024,119 @@ export class GravityCalculator {
 
 --------------------------------------------------
 
---- Файл: src/physics/vector.ts ---
-export interface Vector {
-  x: number;
-  y: number;
-  z: number;
-}
-
-export class Vector3D implements Vector {
+--- Файл: src\physics\vector.ts ---
+export class Vector3D {
   constructor(
     public x: number = 0,
     public y: number = 0,
     public z: number = 0
   ) {}
 
+  // Арифметические операции
   add(v: Vector3D): Vector3D {
     return new Vector3D(this.x + v.x, this.y + v.y, this.z + v.z);
+  }
+
+  subtract(v: Vector3D): Vector3D {
+    return new Vector3D(this.x - v.x, this.y - v.y, this.z - v.z);
   }
 
   multiply(scalar: number): Vector3D {
     return new Vector3D(this.x * scalar, this.y * scalar, this.z * scalar);
   }
 
+  divide(scalar: number): Vector3D {
+    if (scalar === 0) throw new Error("Division by zero");
+    return new Vector3D(this.x / scalar, this.y / scalar, this.z / scalar);
+  }
+
+  // Векторные операции
+  dot(v: Vector3D): number {
+    return this.x * v.x + this.y * v.y + this.z * v.z;
+  }
+
+  cross(v: Vector3D): Vector3D {
+    return new Vector3D(
+      this.y * v.z - this.z * v.y,
+      this.z * v.x - this.x * v.z,
+      this.x * v.y - this.y * v.x
+    );
+  }
+
+  // Нормализация и длина
   magnitude(): number {
     return Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2);
+  }
+
+  magnitudeSquared(): number {
+    return this.x ** 2 + this.y ** 2 + this.z ** 2;
+  }
+
+  normalize(): Vector3D {
+    const mag = this.magnitude();
+    if (mag === 0) return new Vector3D();
+    return this.divide(mag);
+  }
+
+  isNormalized(): boolean {
+    return Math.abs(this.magnitude() - 1) < 1e-6;
+  }
+
+  // Сравнение
+  equals(v: Vector3D, epsilon: number = 1e-6): boolean {
+    return (
+      Math.abs(this.x - v.x) < epsilon &&
+      Math.abs(this.y - v.y) < epsilon &&
+      Math.abs(this.z - v.z) < epsilon
+    );
+  }
+
+  // Клонирование и копирование
+  clone(): Vector3D {
+    return new Vector3D(this.x, this.y, this.z);
+  }
+
+  copyFrom(v: Vector3D): void {
+    this.x = v.x;
+    this.y = v.y;
+    this.z = v.z;
+  }
+
+  set(x: number, y: number, z: number): void {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+  }
+
+  // Прочие полезные методы
+  negate(): Vector3D {
+    return new Vector3D(-this.x, -this.y, -this.z);
+  }
+
+  lerp(v: Vector3D, t: number): Vector3D {
+    return this.add(v.subtract(this).multiply(t));
+  }
+
+  distanceTo(v: Vector3D): number {
+    return this.subtract(v).magnitude();
+  }
+
+  distanceSquaredTo(v: Vector3D): number {
+    return this.subtract(v).magnitudeSquared();
+  }
+
+  angleTo(v: Vector3D): number {
+    const dot = this.dot(v);
+    const magA = this.magnitude();
+    const magB = v.magnitude();
+    if (magA === 0 || magB === 0) return 0;
+    return Math.acos(dot / (magA * magB));
   }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/camera-controller.ts ---
+--- Файл: src\rendering\camera-controller.ts ---
 import * as THREE from "three";
 import { ICameraController } from "./interfaces";
 import {
@@ -869,26 +1145,19 @@ import {
   PlatformAdapter,
 } from "../adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
-import { Vector3D } from "../physics/vector";
 import { SolarSystem } from "../simulation/solar-system";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;
+  private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
+  private velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
+  private mousePrev: THREE.Vector2 = new THREE.Vector2();
+  private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
   private yaw: number = 0;
   private pitch: number = 0;
-
-  private target: THREE.Vector3 = new THREE.Vector3(0, 0, 0);
-
-  private damping: number = 0.25;
-  private velocity: THREE.Vector2 = new THREE.Vector2(0, 0);
-
   private commands = new Set();
-  private moveSpeed: number = 500;
-
   private isMouseDown: boolean = false;
-  private mousePrev: THREE.Vector2 = new THREE.Vector2();
-  private mouseCurr: THREE.Vector2 = new THREE.Vector2();
 
   constructor(
     platformAdapter: PlatformAdapter,
@@ -905,76 +1174,35 @@ export class CameraController implements ICameraController {
     this.updateCamera();
   }
 
-  update(): void {
-    this.applyDamping();
-    this.updateCameraPosition();
+  public update(): void {
     this.updateCamera();
   }
 
-  smoothMoveTo(position: THREE.Vector3, duration: number = 1000) {
-    const startPosition = this.camera.position.clone();
-    const targetPosition = position;
-    const startTime = performance.now();
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const t = Math.min(elapsed / duration, 1);
-
-      this.camera.position.lerpVectors(startPosition, targetPosition, t);
-      this.target.lerpVectors(startPosition, targetPosition, t);
-
-      this.updateCamera();
-
-      if (t < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-
-    requestAnimationFrame(animate);
-  }
-
-  resize(width: number, height: number): void {
+  public resize(width: number, height: number): void {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
   }
 
-  public applyVelocityImpulse(dx: number, dy: number, dz: number): void {
-    // Передаём импульс скорости в систему симуляции
-    // (это будет обработано в SpaceObject.update())
-    const impulse = new Vector3D(dx, dy, dz);
-    // Как передать это в SolarSystem? Нужен callback или событие.
-  }
-
-  getCamera(): THREE.PerspectiveCamera {
+  public getCamera(): THREE.PerspectiveCamera {
     return this.camera;
   }
 
-  lookAt(target: THREE.Vector3): void {
+  public lookAt(target: THREE.Vector3): void {
     this.target.copy(target);
     this.updateCamera();
   }
 
-  setPosition(position: THREE.Vector3): void {
+  public setPosition(position: THREE.Vector3): void {
     this.camera.position.copy(position);
     this.target.copy(position);
     this.updateCamera();
   }
 
-  reset(): void {
-    this.yaw = 0;
-    this.pitch = 0;
-    this.target.set(0, 0, 0);
-    this.velocity.set(0, 0);
-    this.updateCamera();
-  }
-
-  setEnabled(enabled: boolean): void {}
-
-  getPosition(): THREE.Vector3 {
+  public getPosition(): THREE.Vector3 {
     return this.camera.position;
   }
 
-  getDirection(): THREE.Vector3 {
+  public getDirection(): THREE.Vector3 {
     const direction = new THREE.Vector3();
     this.camera.getWorldDirection(direction);
 
@@ -1014,19 +1242,30 @@ export class CameraController implements ICameraController {
     platformAdapter.onPressButton((value) => {
       this.commands.add(value);
 
-      const { forward, right, up } = this.getCameraAxes();
+      const { cameraZAxis, cameraXAxis, cameraYAxis } = this.getCameraAxes();
 
       let impulse = new THREE.Vector3(0, 0, 0);
-      const impulseStrength = 1000; // Подберите под масштаб симуляции
+      const impulseStrength = SIMULATION_CONFIG.IMPULSE_STRENGTH;
 
-      if (this.commands.has(Command.forward)) impulse.copy(forward).multiplyScalar(impulseStrength);
-      if (this.commands.has(Command.back)) impulse.copy(forward).multiplyScalar(-impulseStrength);
-      if (this.commands.has(Command.left)) impulse.copy(right).multiplyScalar(-impulseStrength);
-      if (this.commands.has(Command.right)) impulse.copy(right).multiplyScalar(impulseStrength);
-      if (this.commands.has(Command.up)) impulse.copy(up).multiplyScalar(impulseStrength);
-      if (this.commands.has(Command.down)) impulse.copy(up).multiplyScalar(-impulseStrength);
+      if (this.commands.has(Command.forward))
+        impulse.copy(cameraZAxis).multiplyScalar(impulseStrength);
 
-      // Передаём импульс в систему симуляции
+      if (this.commands.has(Command.back))
+        impulse.copy(cameraZAxis).multiplyScalar(-impulseStrength);
+
+      if (this.commands.has(Command.left))
+        impulse.copy(cameraXAxis).multiplyScalar(-impulseStrength);
+
+      if (this.commands.has(Command.right))
+        impulse.copy(cameraXAxis).multiplyScalar(impulseStrength);
+
+      if (this.commands.has(Command.up))
+        impulse.copy(cameraYAxis).multiplyScalar(impulseStrength);
+
+      if (this.commands.has(Command.down))
+        impulse.copy(cameraYAxis).multiplyScalar(-impulseStrength);
+
+
       this.solarSystem.applyCameraVelocityImpulse(
         impulse.x,
         impulse.y,
@@ -1039,53 +1278,12 @@ export class CameraController implements ICameraController {
     });
   }
 
-  private applyDamping(): void {
-    this.velocity.multiplyScalar(1 - this.damping);
-  }
-
   private handleMouseRotate(): void {
     const delta = new THREE.Vector2()
       .subVectors(this.mouseCurr, this.mousePrev)
       .multiplyScalar(0.002);
 
     this.velocity.set(-delta.x, delta.y);
-  }
-
-  private updateCameraPosition(): void {
-    if (!this.commands.size) return;
-
-    const move = new THREE.Vector3();
-
-    const cameraDirection = new THREE.Vector3(0, 0, -1);
-    cameraDirection.applyQuaternion(this.camera.quaternion);
-
-    const right = new THREE.Vector3(1, 0, 0);
-    right.applyQuaternion(this.camera.quaternion);
-
-    const up = new THREE.Vector3(0, 1, 0);
-
-    let dx = 0,
-      dy = 0,
-      dz = 0;
-
-    if (this.commands.has(Command.forward)) dz += 1;
-    if (this.commands.has(Command.back)) dz -= 1;
-    if (this.commands.has(Command.left)) dx -= 1;
-    if (this.commands.has(Command.right)) dx += 1;
-    if (this.commands.has(Command.up)) dy += 1;
-    if (this.commands.has(Command.down)) dy -= 1;
-
-    if (dx !== 0 || dy !== 0 || dz !== 0) {
-      move
-        .addScaledVector(right, dx)
-        .addScaledVector(up, dy)
-        .addScaledVector(cameraDirection, dz);
-
-      move.multiplyScalar(this.moveSpeed * SIMULATION_CONFIG.SPEED_FACTOR);
-
-      this.camera.position.add(move);
-      this.target.add(move);
-    }
   }
 
   private updateCamera(): void {
@@ -1117,26 +1315,68 @@ export class CameraController implements ICameraController {
   }
 
   private getCameraAxes(): {
-    forward: THREE.Vector3;
-    right: THREE.Vector3;
-    up: THREE.Vector3;
+    cameraZAxis: THREE.Vector3;
+    cameraXAxis: THREE.Vector3;
+    cameraYAxis: THREE.Vector3;
   } {
-    const forward = new THREE.Vector3(0, 0, -1); // вперёд (в системе камеры)
-    const right = new THREE.Vector3(1, 0, 0); // вправо (в системе камеры)
-    const up = new THREE.Vector3(0, 1, 0); // вверх (в системе камеры)
+    const cameraZAxis = new THREE.Vector3(0, 0, -1);
+    const cameraXAxis = new THREE.Vector3(1, 0, 0);
+    const cameraYAxis = new THREE.Vector3(0, 1, 0);
 
-    // Преобразуем в глобальную систему координат через кватернион камеры
-    forward.applyQuaternion(this.camera.quaternion);
-    right.applyQuaternion(this.camera.quaternion);
-    up.applyQuaternion(this.camera.quaternion);
+    cameraZAxis.applyQuaternion(this.camera.quaternion);
+    cameraXAxis.applyQuaternion(this.camera.quaternion);
+    cameraYAxis.applyQuaternion(this.camera.quaternion);
 
-    return { forward, right, up };
+    return { cameraZAxis, cameraXAxis, cameraYAxis };
   }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/interfaces.ts ---
+--- Файл: src\rendering\fps.ts ---
+import { CanvasName, PlatformAdapter } from "../adapters/platform-adapter";
+
+export class FPS {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null = null;
+
+  constructor(private platformAdapter: PlatformAdapter) {
+    this.canvas = this.platformAdapter.getCanvas(CanvasName.FPS);
+    this.canvas.style.position = "absolute";
+    this.canvas.style.top = "10px";
+    this.canvas.style.right = "10px";
+    this.canvas.style.pointerEvents = "none";
+    this.canvas.width = 100;
+    this.canvas.height = 30;
+
+    this.ctx = this.canvas.getContext("2d");
+  }
+
+  public init() {
+    this.platformAdapter.appendToDom(this.canvas);
+  }
+
+  public render(deltaTime: number) {
+    if (!this.canvas || !this.ctx) {
+      return;
+    }
+
+    const fps = 1000 / deltaTime;
+    const fpsText = `FPS: ${Math.floor(fps)}`;
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.font = "14px monospace";
+    this.ctx.textAlign = "right";
+    this.ctx.textBaseline = "top";
+    this.ctx.fillStyle = "lime";
+
+    this.ctx.fillText(fpsText, this.canvas.width - 5, 5);
+  }
+}
+
+--------------------------------------------------
+
+--- Файл: src\rendering\interfaces.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
 import { PlatformAdapter } from "../adapters/platform-adapter";
@@ -1146,15 +1386,8 @@ export interface ITextureManager {
 }
 
 export interface IObjectFactory {
-  createSunMaterial(spaceObject: SpaceObject): THREE.Mesh;
-  createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh): THREE.Mesh;
-  createSpaceObject(spaceObject: SpaceObject): THREE.Mesh;
-  createSpaceBackground(): THREE.Mesh;
-  createLabelSprite(
-    text: string,
-    platformAdapter: PlatformAdapter
-  ): THREE.Sprite | undefined;
-  getSunMaterial(): THREE.ShaderMaterial | undefined;
+  init(): void;
+  render(deltaTime: number): void;
 }
 
 export interface ISceneManager {
@@ -1168,17 +1401,13 @@ export interface ICameraController {
   getCamera(): THREE.PerspectiveCamera;
   lookAt(target: THREE.Vector3): void;
   setPosition(position: THREE.Vector3): void;
-  reset(): void;
-  setEnabled(enabled: boolean): void;
   getPosition(): THREE.Vector3;
   getDirection(): THREE.Vector3;
-  smoothMoveTo(position: THREE.Vector3, duration?: number): void;
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/mini-map.ts ---
-import * as THREE from "three";
+--- Файл: src\rendering\mini-map.ts ---
 import { SpaceObject } from "../entities/space-object";
 import { Vector3D } from "../physics/vector";
 import {
@@ -1207,7 +1436,7 @@ export class MiniMap {
     [7, 0.0000000000192],
   ]);
 
-  constructor(platformAdapter: PlatformAdapter) {
+  constructor(private platformAdapter: PlatformAdapter) {
     this.container = platformAdapter.getCanvas(CanvasName.MINI_MAP);
 
     this.container.width = this.width;
@@ -1226,7 +1455,12 @@ export class MiniMap {
     this.setupEvents(platformAdapter);
   }
 
-  update(objects: SpaceObject[]): void {
+
+  public init(): void {
+    this.platformAdapter.appendToDom(this.container);
+  }
+
+  public render(objects: SpaceObject[]): void {
     this.clear();
     this.drawOrbits(objects);
     this.drawObjects(objects);
@@ -1299,49 +1533,148 @@ export class MiniMap {
       this.context.fillText(obj.name, x, y + size + 10);
     });
   }
-
-  render(): void {}
-
-  getDOMElement(): HTMLElement | undefined {
-    return this.container;
-  }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/object-factory.ts ---
+--- Файл: src\rendering\object-factory.ts ---
 import * as THREE from "three";
 import { SpaceObject } from "../entities/space-object";
-import { IObjectFactory, ITextureManager } from "./interfaces";
+import {
+  ICameraController,
+  IObjectFactory,
+  ISceneManager,
+  ITextureManager,
+} from "./interfaces";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { PlatformAdapter } from "../adapters/platform-adapter";
 import { SunShader } from "../ shaders/sun-shader";
 import { GlowShader } from "../ shaders/glow-shader";
+import { SolarSystem } from "../simulation/solar-system";
 
 export class ObjectFactory implements IObjectFactory {
-  private textureManager: ITextureManager;
-  private sunMaterial: THREE.ShaderMaterial | undefined;
+  private spaceObjectMaterials: Map<string, THREE.ShaderMaterial> = new Map();
+  private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
+  private spaceObjectGroups: Map<string, THREE.Group> = new Map();
+  private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
+  private rotationAccumulators: Map<string, number> = new Map();
 
-  constructor(textureManager: ITextureManager) {
-    this.textureManager = textureManager;
+  constructor(
+    private platformAdapter: PlatformAdapter,
+    private textureManager: ITextureManager,
+    private sceneManager: ISceneManager,
+    private cameraController: ICameraController,
+    private system: SolarSystem
+  ) {}
+
+  public init(): void {
+    const background = this.createSpaceBackground();
+    const spaceObjects = this.system.getSpaceObjects();
+
+    this.sceneManager.getScene().add(background);
+
+    spaceObjects.forEach((obj) => {
+      if (obj.name === "Camera") return;
+
+      let mesh: THREE.Mesh;
+
+      if (obj.name === "Sun") {
+        mesh = this.createSunMaterial(obj);
+        const glowMesh = this.createGlowMaterial(obj, mesh);
+
+        this.spaceObjectMeshes.set("SunGlow", glowMesh);
+        this.sceneManager.getScene().add(mesh);
+        this.sceneManager.getScene().add(glowMesh);
+      } else {
+        mesh = this.createSpaceObject(obj);
+
+        this.sceneManager.getScene().add(mesh);
+      }
+
+      this.spaceObjectMeshes.set(obj.name, mesh);
+
+      const labelSprite = this.createLabelSprite(obj.name);
+
+      // Создаём Group для трансформаций (даже если вращение не нужно)
+      const group = new THREE.Group();
+      group.add(mesh); // Mesh становится дочерним
+      this.sceneManager.getScene().add(group);
+      this.spaceObjectGroups.set(obj.name, group); // Сохраняем Group
+
+      if (labelSprite) {
+        this.spaceObjectLabels.set(obj.name, labelSprite);
+        this.sceneManager.getScene().add(labelSprite);
+      }
+
+      if (obj.rotationPeriod) {
+        this.rotationAccumulators.set(obj.name, 0);
+      }
+    });
   }
 
-  createSunMaterial(spaceObject: SpaceObject) {
-    this.sunMaterial = new THREE.ShaderMaterial({
+  public render(deltaTime: number): void {
+    const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
+    const spaceObjects = this.system.getSpaceObjects();
+
+    spaceObjects.forEach((obj) => {
+      if (obj.name === "Camera") {
+        this.cameraController.setPosition(
+          new THREE.Vector3(
+            obj.pos.x * scaleDist,
+            obj.pos.y * scaleDist,
+            obj.pos.z * scaleDist
+          )
+        );
+
+        return;
+      }
+
+      const mesh = this.spaceObjectMeshes.get(obj.name);
+      const group = this.spaceObjectGroups.get(obj.name);
+      const label = this.spaceObjectLabels.get(obj.name);
+
+      if (!mesh || !group) return;
+
+      // 1. Обновляем позицию Group (а не Mesh!)
+      group.position.set(
+        obj.pos.x * scaleDist,
+        obj.pos.y * scaleDist,
+        obj.pos.z * scaleDist
+      );
+
+      // 2. Применяем вращение к Group
+      this.applyRotation(obj, group, mesh, deltaTime);
+
+      // 3. Обновляем лейбл
+      if (label) {
+        this.updateLabelPosition(label, group, obj.radius, scaleDist);
+      }
+
+      // 4. Обновляем Glow для Солнца
+      if (obj.name === "Sun") {
+        this.updateSunGlow(mesh);
+      }
+    });
+
+    this.updateSunShader();
+  }
+
+  private createSunMaterial(spaceObject: SpaceObject) {
+    const sunMaterial = new THREE.ShaderMaterial({
       uniforms: SunShader.uniforms,
       vertexShader: SunShader.vertexShader,
       fragmentShader: SunShader.fragmentShader,
       transparent: false,
     });
 
-    this.sunMaterial.uniforms.uTexture.value =
+    sunMaterial.uniforms.uTexture.value =
       this.textureManager.loadTexture("sun_color.jpg");
-
-    this.sunMaterial.uniforms.uNormalMap.value =
+    sunMaterial.uniforms.uNormalMap.value =
       this.textureManager.loadTexture("sun_normal.jpg");
-
-    this.sunMaterial.uniforms.uEmissiveMap.value =
+    sunMaterial.uniforms.uEmissiveMap.value =
       this.textureManager.loadTexture("sun_emissive.jpg");
+
+    this.spaceObjectMaterials.set(spaceObject.name, sunMaterial);
 
     const sunGeometry = new THREE.SphereGeometry(
       this.calcRadiusPx(spaceObject.radius),
@@ -1349,7 +1682,8 @@ export class ObjectFactory implements IObjectFactory {
       32
     );
 
-    const sunMesh = new THREE.Mesh(sunGeometry, this.sunMaterial);
+    const sunMesh = new THREE.Mesh(sunGeometry, sunMaterial);
+
     sunMesh.name = spaceObject.name;
     sunMesh.castShadow = false;
     sunMesh.receiveShadow = false;
@@ -1357,8 +1691,8 @@ export class ObjectFactory implements IObjectFactory {
     return sunMesh;
   }
 
-  createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh) {
-    const glowRadius = this.calcRadiusPx(spaceObject.radius) * 5;
+  private createGlowMaterial(spaceObject: SpaceObject, mesh: THREE.Mesh) {
+    const glowRadius = this.calcRadiusPx(spaceObject.radius) * 7;
     const glowGeometry = new THREE.PlaneGeometry(glowRadius, glowRadius);
 
     const glowMaterial = new THREE.ShaderMaterial({
@@ -1367,10 +1701,12 @@ export class ObjectFactory implements IObjectFactory {
       fragmentShader: GlowShader.fragmentShader,
       transparent: true,
       blending: THREE.NormalBlending,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
     });
 
     const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+
     glowMesh.position.copy(mesh.position);
     glowMesh.castShadow = false;
     glowMesh.receiveShadow = false;
@@ -1378,15 +1714,24 @@ export class ObjectFactory implements IObjectFactory {
     return glowMesh;
   }
 
-  createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
-    return this.getSpaceObjectMesh(
-      new THREE.SphereGeometry(this.calcRadiusPx(spaceObject.radius), 32, 32),
-      this.getSpaceObjectMaterial(spaceObject),
-      spaceObject
+  private createSpaceObject(spaceObject: SpaceObject): THREE.Mesh {
+    const material = this.getSpaceObjectMaterial(spaceObject);
+
+    const geometry = new THREE.SphereGeometry(
+      this.calcRadiusPx(spaceObject.radius),
+      32,
+      32
     );
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = spaceObject.name;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    return mesh;
   }
 
-  createSpaceBackground(): THREE.Mesh {
+  private createSpaceBackground(): THREE.Mesh {
     const spaceGeometry = new THREE.SphereGeometry(500000, 100, 100);
     const spaceTexture = this.textureManager.loadTexture("spacehigh.jpg");
     spaceTexture.anisotropy = 10;
@@ -1407,12 +1752,8 @@ export class ObjectFactory implements IObjectFactory {
     return background;
   }
 
-  createLabelSprite(
-    text: string,
-    platformAdapter: PlatformAdapter
-  ): THREE.Sprite | undefined {
-    // Создаём canvas для текста
-    const canvas = platformAdapter.getCanvasWithoutAddToDom();
+  private createLabelSprite(text: string): THREE.Sprite | undefined {
+    const canvas = this.platformAdapter.getCanvasWithoutAddToDom();
 
     if (!canvas) return;
 
@@ -1420,28 +1761,19 @@ export class ObjectFactory implements IObjectFactory {
     context.font = "24px Arial, sans-serif";
     context.textAlign = "center";
 
-    // Рисуем текст
     context.fillStyle = "white";
     context.fillText(text, canvas.width / 2, canvas.height / 2);
 
-    // Создаём текстуру из canvas
     const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true; // Обязательно для первого рендера
+    texture.needsUpdate = true;
 
-    // Создаём материал и спрайт
     const material = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
-      depthTest: true, // Чтобы скрывался за объектами
+      depthTest: true,
     });
 
-    const sprite = new THREE.Sprite(material);
-
-    return sprite;
-  }
-
-  getSunMaterial() {
-    return this.sunMaterial;
+    return new THREE.Sprite(material);
   }
 
   private getSpaceObjectMaterial(spaceObject: SpaceObject) {
@@ -1465,19 +1797,6 @@ export class ObjectFactory implements IObjectFactory {
     });
   }
 
-  private getSpaceObjectMesh(
-    geometry: THREE.SphereGeometry,
-    material: THREE.MeshPhongMaterial,
-    spaceObject: SpaceObject
-  ) {
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = spaceObject.name;
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    return mesh;
-  }
-
   private calcRadiusPx(radius: number) {
     return (
       radius *
@@ -1485,44 +1804,108 @@ export class ObjectFactory implements IObjectFactory {
       SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE
     );
   }
+
+  private applyRotation(
+    obj: SpaceObject,
+    group: THREE.Group,
+    mesh: THREE.Mesh, // явно указываем тип
+    deltaTime: number
+  ): void {
+    if (!obj.rotationPeriod) return;
+
+    const periodSec = obj.rotationPeriod * 24 * 3600;
+    const angularSpeed = (2 * Math.PI) / periodSec;
+    const accumulator = this.rotationAccumulators.get(obj.name) || 0;
+
+    const scaledDeltaTime =
+      (deltaTime / 1000) * SIMULATION_CONFIG.SIMULATION_DT;
+    const newAccumulator = accumulator + angularSpeed * scaledDeltaTime;
+    this.rotationAccumulators.set(obj.name, newAccumulator);
+
+    // Получаем equatorGroup (дочернюю группу для вращения)
+    let equatorGroup = group.children.find(
+      (child) => (child as any).userData?.isEquatorGroup
+    ) as THREE.Group | undefined;
+
+    if (!equatorGroup) {
+      equatorGroup = new THREE.Group();
+      equatorGroup.userData.isEquatorGroup = true;
+
+      // Перемещаем mesh в equatorGroup
+      mesh.parent?.remove(mesh);
+      equatorGroup.add(mesh);
+      group.add(equatorGroup);
+    }
+
+    // Наклоняем ось (через group)
+    if (obj.axialTilt !== undefined) {
+      group.rotation.x = THREE.MathUtils.degToRad(obj.axialTilt);
+    } else {
+      group.rotation.x = 0;
+    }
+
+    // Вращаем equatorGroup вокруг локальной y
+    equatorGroup.rotation.y = newAccumulator;
+  }
+
+  private updateLabelPosition(
+    label: THREE.Sprite,
+    mesh: THREE.Group | THREE.Mesh,
+    radius: number,
+    scaleDist: number
+  ): void {
+    label.position.copy(mesh.position);
+    label.position.y += radius * scaleDist * 1.3;
+
+    const distance = this.cameraController
+      .getCamera()
+      .position.distanceTo(label.position);
+    label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
+  }
+
+  private updateSunGlow(mesh: THREE.Group | THREE.Mesh): void {
+    const glowMesh = this.spaceObjectMeshes.get("SunGlow");
+    if (glowMesh) {
+      glowMesh.position.copy(mesh.position);
+      glowMesh.lookAt(this.cameraController.getCamera().position);
+    }
+  }
+
+  private updateSunShader(): void {
+    const sunMaterial = this.spaceObjectMaterials.get("Sun");
+    if (sunMaterial) {
+      sunMaterial.uniforms.uTime.value += 0.001;
+    }
+  }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/renderer-core.ts ---
+--- Файл: src\rendering\renderer-core.ts ---
 import * as THREE from "three";
 import { CanvasName, PlatformAdapter } from "../adapters/platform-adapter";
-import { SpaceObject } from "../entities/space-object";
-import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { ISceneManager } from "./interfaces";
 import { ICameraController } from "./interfaces";
 import { IObjectFactory } from "./interfaces";
 import { MiniMap } from "./mini-map";
+import { SolarSystem } from "../simulation/solar-system";
+import { FPS } from "./fps";
 
 export class RendererCore {
   private renderer: THREE.WebGLRenderer;
-  private sceneManager: ISceneManager;
-  private cameraController: ICameraController;
-  private objectFactory: IObjectFactory;
-  private spaceObjectMeshes: Map<string, THREE.Mesh> = new Map();
-  private spaceObjectLabels: Map<string, THREE.Sprite> = new Map();
-  private fpsElement: HTMLElement | null = null;
-  private platformAdapter: PlatformAdapter;
-  private miniMap: MiniMap;
 
   constructor(
-    platformAdapter: PlatformAdapter,
-    sceneManager: ISceneManager,
-    cameraController: ICameraController,
-    objectFactory: IObjectFactory
+    private platformAdapter: PlatformAdapter,
+    private sceneManager: ISceneManager,
+    private cameraController: ICameraController,
+    private objectFactory: IObjectFactory,
+    private miniMap: MiniMap,
+    private system: SolarSystem,
+    private fps: FPS,
   ) {
-    this.platformAdapter = platformAdapter;
-    this.sceneManager = sceneManager;
-    this.cameraController = cameraController;
-    this.objectFactory = objectFactory;
 
     this.renderer = new THREE.WebGLRenderer({
-      canvas: platformAdapter.getCanvas(CanvasName.MAIN_SCENE),
+      canvas: this.platformAdapter.getCanvas(CanvasName.MAIN_SCENE),
       antialias: true,
     });
 
@@ -1531,16 +1914,15 @@ export class RendererCore {
     // Альтернативы:
     // THREE.PCFShadowMap (чётче)
     // THREE.BasicShadowMap (быстрее, грубее)
-
-    this.miniMap = new MiniMap(platformAdapter);
   }
 
-  initialize(): void {
+  public init(): void {
     this.renderer.setPixelRatio(this.platformAdapter.getPixelRatio());
 
     this.platformAdapter.onResize(() => {
       const width = this.platformAdapter.getWidth();
       const height = this.platformAdapter.getHeight();
+      
       this.renderer.setSize(width, height);
       this.cameraController.resize(width, height);
     });
@@ -1550,149 +1932,26 @@ export class RendererCore {
       this.platformAdapter.getHeight()
     );
 
-    this.platformAdapter.appendToDom(this.miniMap.getDOMElement());
+    this.objectFactory.init();
+    this.miniMap.init();
+    this.fps.init();
   }
 
-  setFpsElement(element: HTMLElement): void {
-    this.fpsElement = element;
-  }
-
-  initSpaceObjects(spaceObjects: SpaceObject[]): void {
-    const background = this.objectFactory.createSpaceBackground();
-
-    this.sceneManager.getScene().add(background);
-
-    spaceObjects.forEach((obj) => {
-      if (obj.name === "Camera") {
-        return;
-      } else if (obj.name === "Sun") {
-        const mesh = this.objectFactory.createSunMaterial(obj);
-        const glowMesh = this.objectFactory.createGlowMaterial(obj, mesh);
-
-        this.spaceObjectMeshes.set(obj.name, mesh);
-        this.spaceObjectMeshes.set("SunGlow", glowMesh);
-        this.sceneManager.getScene().add(mesh);
-        this.sceneManager.getScene().add(glowMesh);
-      } else {
-        const mesh = this.objectFactory.createSpaceObject(obj);
-
-        this.spaceObjectMeshes.set(obj.name, mesh);
-        this.sceneManager.getScene().add(mesh);
-      }
-
-      const labelSprite = this.objectFactory.createLabelSprite(
-        obj.name,
-        this.platformAdapter
-      );
-
-      if (labelSprite) {
-        this.spaceObjectLabels.set(obj.name, labelSprite);
-        this.sceneManager.getScene().add(labelSprite);
-      }
-    });
-
-    const mesh = this.spaceObjectMeshes.get("Earth");
-
-    if (mesh) {
-      // this.cameraController.smoothMoveTo(mesh.position, 2000);
-    }
-  }
-
-  updateSpaceObjects(spaceObjects: SpaceObject[]): void {
-    const scaleDist = SIMULATION_CONFIG.SCALE_DIST;
-
-    spaceObjects.forEach((obj) => {
-      if (obj.name === "Camera") {
-        this.cameraController.setPosition(
-          new THREE.Vector3(
-            obj.pos.x * scaleDist,
-            obj.pos.y * scaleDist,
-            obj.pos.z * scaleDist
-          )
-        );
-
-        return;
-      }
-
-      const mesh = this.spaceObjectMeshes.get(obj.name);
-      const label = this.spaceObjectLabels.get(obj.name);
-
-      if (!mesh) {
-        return;
-      }
-
-      mesh.position.set(
-        obj.pos.x * scaleDist,
-        obj.pos.y * scaleDist,
-        obj.pos.z * scaleDist
-      );
-
-      if (label) {
-        label.position.copy(mesh.position);
-        label.position.y += obj.radius * scaleDist * 1.3;
-
-        const distance = this.cameraController
-          .getCamera()
-          .position.distanceTo(label.position);
-
-        label.scale.setScalar(distance / SIMULATION_CONFIG.LABEL_SCALE_FATOR);
-      }
-    });
-
-    const glowMesh = this.spaceObjectMeshes.get("SunGlow");
-
-    if (glowMesh) {
-      glowMesh.lookAt(this.cameraController.getCamera().position);
-    }
-
-    this.miniMap.update(spaceObjects);
-  }
-
-  render(deltaTime: number): void {
-    const sunMaterial = this.objectFactory.getSunMaterial();
-
-    if (sunMaterial) {
-      sunMaterial.uniforms.uTime.value += deltaTime * 0.001;
-    }
-
-    // this.cameraController.update();
-
-    if (this.fpsElement) {
-      const fps = 1000 / deltaTime;
-      this.fpsElement.textContent = `FPS: ${Math.floor(fps)}`;
-    }
+  public render(deltaTime: number): void {
+    this.objectFactory.render(deltaTime);
+    this.miniMap.render(this.system.getSpaceObjects());
+    this.fps.render(deltaTime)
 
     this.renderer.render(
       this.sceneManager.getScene(),
       this.cameraController.getCamera()
     );
-
-    this.miniMap.render();
-  }
-
-  dispose(): void {
-    this.renderer.dispose();
-
-    this.spaceObjectMeshes.forEach((mesh) => {
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-    });
-
-    this.spaceObjectMeshes.clear();
-
-    this.spaceObjectLabels.forEach((sprite) => {
-      sprite.material.map?.dispose();
-      sprite.material.dispose();
-      this.sceneManager.getScene().remove(sprite);
-    });
-
-    this.spaceObjectLabels.clear();
   }
 }
 
 --------------------------------------------------
 
---- Файл: src/rendering/scene-manager.ts ---
+--- Файл: src\rendering\scene-manager.ts ---
 import * as THREE from "three";
 import { ISceneManager } from "./interfaces";
 import { TextureManager } from "./texture-manager";
@@ -1731,7 +1990,7 @@ export class SceneManager implements ISceneManager {
 
 --------------------------------------------------
 
---- Файл: src/rendering/texture-manager.ts ---
+--- Файл: src\rendering\texture-manager.ts ---
 import * as THREE from "three";
 import { ITextureManager } from "./interfaces";
 
@@ -1764,11 +2023,12 @@ export class TextureManager implements ITextureManager {
 
 --------------------------------------------------
 
---- Файл: src/simulation/solar-system.ts ---
+--- Файл: src\simulation\solar-system.ts ---
 import { SpaceObject } from "../entities/space-object";
-import { SPACE_OBJECTS } from "../config/space-objects";
+import { spaceObjects } from "../config/space-objects";
 import { SIMULATION_CONFIG } from "../config/simulation-config";
 import { Vector3D } from "../physics/vector";
+import { CelestialBody } from "../entities/celestial-body";
 
 export class SolarSystem {
   private spaceObjects: SpaceObject[] = [];
@@ -1779,31 +2039,64 @@ export class SolarSystem {
     this.initSpaceObjects();
   }
 
-  private initSpaceObjects() {
-    for (const config of SPACE_OBJECTS) {
-      this.spaceObjects.push(
-        new SpaceObject(
-          config.name,
-          config.mass,
-          config.pos,
-          config.vel,
-          config.color,
-          config.radius,
-          config.texture
-        )
-      );
-    }
+  private initSpaceObjects(): void {
+    this.spaceObjects = this.createSpaceObjectsFromCelestialBody(spaceObjects);
   }
 
-  getSpaceObjects() {
+  private createSpaceObjectsFromCelestialBody(
+    body: CelestialBody,
+    parent?: SpaceObject
+  ): SpaceObject[] {
+    const spaceObjects: SpaceObject[] = [];
+
+    const spaceObject = new SpaceObject(
+      body.name,
+      body.mass ?? body.totalMass,
+      body.pos.clone(),
+      body.vel.clone(),
+      parent ? body.pos.clone() : new Vector3D(),
+      parent ? body.vel.clone() : new Vector3D(),
+      body.color ?? null,
+      body.radius,
+      body.texture ?? "",
+      body.rotationPeriod ?? 0,
+      body.axialTilt ?? 0,
+      body.totalMass,
+      body.children
+    );
+
+    if (parent) spaceObject.parent = parent;
+    spaceObjects.push(spaceObject);
+
+    if (body.children && body.children.length > 0) {
+      for (const child of body.children) {
+        const childObjects = this.createSpaceObjectsFromCelestialBody(
+          child,
+          spaceObject
+        );
+
+        spaceObjects.push(...childObjects);
+      }
+    }
+
+    return spaceObjects;
+  }
+
+  getSpaceObjects(): SpaceObject[] {
     return this.spaceObjects;
   }
 
-  step(dt: number = this.dt) {
-    const spaceObjectsCopy = [...this.spaceObjects];
+  step(dt: number = this.dt): void {
+    for (const spaceObject of this.spaceObjects) {
+      if (!spaceObject.isSatellite()) {
+        spaceObject.update(dt, this.spaceObjects);
+      }
+    }
 
     for (const spaceObject of this.spaceObjects) {
-      spaceObject.update(dt, spaceObjectsCopy);
+      if (spaceObject.children) {
+        spaceObject.updateChildrenPositions(dt, spaceObject, this.spaceObjects);
+      }
     }
   }
 
@@ -1812,6 +2105,8 @@ export class SolarSystem {
 
     if (camera) {
       camera.vel = camera.vel.add(new Vector3D(dx, dy, dz));
+    } else {
+      console.warn("Камера не найдена в системе!");
     }
   }
 }
@@ -1841,6 +2136,7 @@ physics/
   vector.ts
 rendering/
   camera-controller.ts
+  fps.ts
   interfaces.ts
   mini-map.ts
   object-factory.ts
@@ -1872,12 +2168,12 @@ textures/
   plutohigh-min.jpg
   plutolow-min.jpg
   plutomedium-min.jpg
-  saturn_ringhigh.png
-  saturn_ringlow.png
-  saturn_ringmedium.png
   saturnhigh-min.jpg
   saturnlow-min.jpg
   saturnmedium-min.jpg
+  saturn_ringhigh.png
+  saturn_ringlow.png
+  saturn_ringmedium.png
   sol.png
   spacehigh.jpg
   spacelow.jpg
@@ -1885,12 +2181,12 @@ textures/
   sun_color.jpg
   sun_emissive.jpg
   sun_normal.jpg
-  uranus_ringhigh.png
-  uranus_ringlow.png
-  uranus_ringmedium.png
   uranushigh-min.jpg
   uranuslow-min.jpg
   uranusmedium-min.jpg
+  uranus_ringhigh.png
+  uranus_ringlow.png
+  uranus_ringmedium.png
   venushigh-min.jpg
   venuslow-min.jpg
   venusmedium-min.jpg

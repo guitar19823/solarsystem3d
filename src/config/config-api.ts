@@ -1,5 +1,4 @@
-import { Vector3D } from "../physics/vector";
-import { SPACE_OBJECTS, ISpaceObjectConfig } from "./space-objects";
+import { Vector3D } from "../physics/vector-3d";
 import { SIMULATION_CONFIG } from "./simulation-config";
 
 export interface SimulationConfig {
@@ -11,8 +10,6 @@ export interface SimulationConfig {
 }
 
 export class ConfigAPI {
-  private static spaceObjects: ISpaceObjectConfig[] = [...SPACE_OBJECTS]; // изначальные данные
-
   static setSimulationSpeed(factor: number): void {
     if (factor <= 0) {
       throw new Error("Simulation speed factor must be positive");
@@ -63,51 +60,20 @@ export class ConfigAPI {
 
   static setSpeedFactor(factor: number): void {
     if (factor <= 0) {
-      throw new Error("Label scale factor must be positive");
+      throw new Error("Speed factor must be positive");
     }
     SIMULATION_CONFIG.SPEED_FACTOR = factor / 10000000;
   }
 
-  static addSpaceObject(config: ISpaceObjectConfig): void {
-    const existing = ConfigAPI.getSpaceObject(config.name);
-    if (existing) {
-      throw new Error(`SpaceObject with name "${config.name}" already exists`);
+  static getImpulseStrength(): number {
+    return SIMULATION_CONFIG.IMPULSE_STRENGTH;
+  }
+
+  static setImpulseStrength(factor: number): void {
+    if (factor <= 0) {
+      throw new Error("Impulse strength must be positive");
     }
-    ConfigAPI.spaceObjects.push(config);
-  }
-
-  static removeSpaceObject(name: string): boolean {
-    const index = ConfigAPI.findSpaceObjectIndex(name);
-    if (index === -1) {
-      return false;
-    }
-    ConfigAPI.spaceObjects.splice(index, 1);
-    return true;
-  }
-
-  static updateSpaceObject(
-    name: string,
-    updates: Partial<ISpaceObjectConfig>
-  ): boolean {
-    const spaceObject = ConfigAPI.getSpaceObject(name);
-    if (!spaceObject) {
-      return false;
-    }
-
-    Object.assign(spaceObject, updates);
-    return true;
-  }
-
-  static getSpaceObject(name: string): ISpaceObjectConfig | undefined {
-    return ConfigAPI.spaceObjects.find((p) => p.name === name);
-  }
-
-  static getAllSpaceObjects(): ISpaceObjectConfig[] {
-    return [...ConfigAPI.spaceObjects]; // возвращаем копию
-  }
-
-  private static findSpaceObjectIndex(name: string): number {
-    return ConfigAPI.spaceObjects.findIndex((p) => p.name === name);
+    SIMULATION_CONFIG.IMPULSE_STRENGTH = factor;
   }
 
   static resetSimulationConfig(): void {
@@ -116,19 +82,5 @@ export class ConfigAPI {
     SIMULATION_CONFIG.MAX_DT = 864000;
     SIMULATION_CONFIG.AU_IN_PX = 100;
     SIMULATION_CONFIG.OBJECTS_RADIUS_SCALE = 1;
-  }
-
-  static resetSpaceObjectData(): void {
-    ConfigAPI.spaceObjects = [
-      {
-        name: "Sun",
-        mass: 1.989e30,
-        pos: new Vector3D(0, 0, 0),
-        vel: new Vector3D(0, 0, 0),
-        color: "yellow",
-        radius: 696340000,
-      },
-      // ... остальные планеты как в исходном SPACE_OBJECTS
-    ];
   }
 }

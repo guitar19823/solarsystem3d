@@ -6,7 +6,7 @@ import {
   PlatformAdapter,
 } from "./src/adapters/platform-adapter";
 import { SIMULATION_CONFIG } from "./src/config/simulation-config";
-import { Vector3D } from "./src/physics/vector";
+import { Vector3D } from "./src/physics/vector-3d";
 
 export class CameraController implements ICameraController {
   private camera: THREE.PerspectiveCamera;

@@ -1,10 +1,10 @@
-import { SpaceObject } from "../entities/space-object";
-import { Vector3D } from "../physics/vector";
+import { Vector3D } from "../physics/vector-3d";
 import {
   CanvasName,
   Command,
   PlatformAdapter,
 } from "../adapters/platform-adapter";
+import { CelestialBody } from "../entities/celestial-body";
 
 export class MiniMap {
   private container: HTMLCanvasElement | undefined;
@@ -45,15 +45,16 @@ export class MiniMap {
     this.setupEvents(platformAdapter);
   }
 
-
   public init(): void {
     this.platformAdapter.appendToDom(this.container);
   }
 
-  public render(objects: SpaceObject[]): void {
+  public render(objects: CelestialBody | undefined): void {
+    if (!objects?.children) return;
+
     this.clear();
-    this.drawOrbits(objects);
-    this.drawObjects(objects);
+    this.drawOrbits(objects.children);
+    this.drawObjects(objects.children);
   }
 
   private setupEvents(platformAdapter: PlatformAdapter): void {
@@ -72,7 +73,7 @@ export class MiniMap {
     this.context.clearRect(0, 0, this.width, this.height);
   }
 
-  private drawOrbits(objects: SpaceObject[]): void {
+  private drawOrbits(objects: CelestialBody[]): void {
     const sunPos = objects.find((o) => o.name === "Sun")?.pos || new Vector3D();
 
     objects.forEach((obj) => {
@@ -99,7 +100,7 @@ export class MiniMap {
     });
   }
 
-  private drawObjects(objects: SpaceObject[]): void {
+  private drawObjects(objects: CelestialBody[]): void {
     const sunPos = objects.find((o) => o.name === "Sun")?.pos || new Vector3D();
 
     objects.forEach((obj) => {
@@ -120,7 +121,14 @@ export class MiniMap {
       this.context.font = "8px sans-serif";
       this.context.fillStyle = "white";
       this.context.textAlign = "center";
-      this.context.fillText(obj.name, x, y + size + 10);
+
+      const firstChildren = obj.children?.[0];
+
+      if (firstChildren) {
+        this.context.fillText(firstChildren.name, x, y + size + 10);
+      } else {
+        this.context.fillText(obj.name, x, y + size + 10);
+      }
     });
   }
 }
