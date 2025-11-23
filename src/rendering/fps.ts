@@ -6,14 +6,9 @@ export class FPS {
 
   constructor(private platformAdapter: PlatformAdapter) {
     this.canvas = this.platformAdapter.getCanvas(CanvasName.FPS);
-    this.canvas.style.position = "absolute";
-    this.canvas.style.top = "10px";
-    this.canvas.style.right = "10px";
-    this.canvas.style.pointerEvents = "none";
+    this.ctx = this.canvas.getContext("2d");
     this.canvas.width = 100;
     this.canvas.height = 30;
-
-    this.ctx = this.canvas.getContext("2d");
   }
 
   public init() {

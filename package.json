@@ -16,6 +16,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
+  "dependencies": {
+    "three": "^0.181.1"
+  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/three": "^0.181.0",
@@ -42,8 +45,5 @@
       "json",
       "node"
     ]
-  },
-  "dependencies": {
-    "three": "^0.181.1"
   }
 }

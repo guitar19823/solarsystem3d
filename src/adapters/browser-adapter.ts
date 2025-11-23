@@ -122,6 +122,7 @@ export class BrowserAdapter implements PlatformAdapter {
 
   private createCanvas(canvasName: CanvasName) {
     const canvas = document.createElement("canvas");
+    canvas.id = canvasName;
 
     this.canvasList.set(canvasName, canvas);
     document.body.appendChild(canvas);
